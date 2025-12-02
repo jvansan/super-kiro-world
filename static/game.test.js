@@ -615,6 +615,53 @@ const ParticleSystem = {
         }
     },
     
+    createSparkle(x, y) {
+        const particleCount = Math.floor(Math.random() * 6) + 5; // 5-10 particles
+        
+        for (let i = 0; i < particleCount; i++) {
+            const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI;
+            const speed = 1 + Math.random() * 2;
+            
+            this.createParticle({
+                x: x,
+                y: y,
+                velocityX: Math.cos(angle) * speed,
+                velocityY: Math.sin(angle) * speed,
+                size: 3 + Math.random() * 4,
+                color: ['#FFD700', '#FFA500', '#FFFF00', '#FFE4B5'][Math.floor(Math.random() * 4)],
+                opacity: 1.0,
+                fadeRate: 0.02 + Math.random() * 0.01,
+                rotation: Math.random() * Math.PI * 2,
+                rotationSpeed: (Math.random() - 0.5) * 0.3,
+                type: 'sparkle'
+            });
+        }
+    },
+    
+    createConfetti() {
+        const particleCount = Math.floor(Math.random() * 11) + 20; // 20-30 particles
+        const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#790ECB'];
+        
+        for (let i = 0; i < particleCount; i++) {
+            const spawnX = Math.random() * 800; // Simplified for testing
+            const spawnY = -20 - Math.random() * 100;
+            
+            this.createParticle({
+                x: spawnX,
+                y: spawnY,
+                velocityX: (Math.random() - 0.5) * 2,
+                velocityY: 2 + Math.random() * 2,
+                size: 4 + Math.random() * 4,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                opacity: 1.0,
+                fadeRate: 0.005,
+                rotation: Math.random() * Math.PI * 2,
+                rotationSpeed: (Math.random() - 0.5) * 0.4,
+                type: 'confetti'
+            });
+        }
+    },
+    
     clear() {
         this.particles = [];
     }
@@ -982,6 +1029,192 @@ describe('ParticleSystem', () => {
         
         // At least some particles should have moved
         expect(movedCount).toBeGreaterThan(0);
+    });
+
+    /**
+     * **Feature: game-enhancements, Property 25: Sparkle count constraint**
+     * For any collection event, the number of sparkle particles spawned should be between five and ten inclusive
+     * **Validates: Requirements 6.4**
+     */
+    it('Property 25: Sparkle count constraint - spawns 5-10 particles', () => {
+        fc.assert(
+            fc.property(
+                fc.float({ min: 0, max: 1000, noNaN: true }), // spawn x
+                fc.float({ min: 0, max: 1000, noNaN: true }), // spawn y
+                (spawnX, spawnY) => {
+                    ParticleSystem.clear();
+                    
+                    // Create sparkle effect
+                    ParticleSystem.createSparkle(spawnX, spawnY);
+                    
+                    // Get all sparkle particles
+                    const sparkleParticles = ParticleSystem.particles.filter(p => p.type === 'sparkle');
+                    
+                    // Property: Should spawn between 5-10 particles inclusive
+                    return sparkleParticles.length >= 5 && sparkleParticles.length <= 10;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: game-enhancements, Property 30: Confetti count constraint**
+     * For any new high score event, the number of confetti particles spawned should be between twenty and thirty inclusive
+     * **Validates: Requirements 7.4**
+     */
+    it('Property 30: Confetti count constraint - spawns 20-30 particles', () => {
+        fc.assert(
+            fc.property(
+                fc.constant(null), // No input needed, confetti spawns across screen
+                () => {
+                    ParticleSystem.clear();
+                    
+                    // Create confetti effect
+                    ParticleSystem.createConfetti();
+                    
+                    // Get all confetti particles
+                    const confettiParticles = ParticleSystem.particles.filter(p => p.type === 'confetti');
+                    
+                    // Property: Should spawn between 20-30 particles inclusive
+                    return confettiParticles.length >= 20 && confettiParticles.length <= 30;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit Tests for Sparkle and Confetti Effects
+
+    it('should spawn sparkle particles on collection', () => {
+        ParticleSystem.clear();
+        
+        // Simulate collecting a coin
+        ParticleSystem.createSparkle(150, 200);
+        
+        const sparkleParticles = ParticleSystem.particles.filter(p => p.type === 'sparkle');
+        
+        // Should spawn sparkle particles
+        expect(sparkleParticles.length).toBeGreaterThan(0);
+        
+        // All sparkles should start at collection point
+        for (const particle of sparkleParticles) {
+            expect(particle.x).toBe(150);
+            expect(particle.y).toBe(200);
+        }
+    });
+
+    it('should spawn sparkle count between 5-10', () => {
+        ParticleSystem.clear();
+        
+        ParticleSystem.createSparkle(100, 100);
+        
+        const sparkleParticles = ParticleSystem.particles.filter(p => p.type === 'sparkle');
+        
+        expect(sparkleParticles.length).toBeGreaterThanOrEqual(5);
+        expect(sparkleParticles.length).toBeLessThanOrEqual(10);
+    });
+
+    it('should have sparkle particles with upward velocity', () => {
+        ParticleSystem.clear();
+        
+        ParticleSystem.createSparkle(100, 100);
+        
+        const sparkleParticles = ParticleSystem.particles.filter(p => p.type === 'sparkle');
+        
+        // Most sparkles should have upward (negative) velocity
+        let upwardCount = 0;
+        for (const particle of sparkleParticles) {
+            if (particle.velocityY < 0) {
+                upwardCount++;
+            }
+        }
+        
+        // At least half should be moving upward
+        expect(upwardCount).toBeGreaterThan(sparkleParticles.length / 2);
+    });
+
+    it('should have sparkle particles with rotation', () => {
+        ParticleSystem.clear();
+        
+        ParticleSystem.createSparkle(100, 100);
+        
+        const sparkleParticles = ParticleSystem.particles.filter(p => p.type === 'sparkle');
+        
+        // All sparkles should have rotation speed
+        for (const particle of sparkleParticles) {
+            expect(particle.rotationSpeed).not.toBe(0);
+        }
+    });
+
+    it('should spawn confetti on new high score', () => {
+        ParticleSystem.clear();
+        
+        // Simulate new high score
+        ParticleSystem.createConfetti();
+        
+        const confettiParticles = ParticleSystem.particles.filter(p => p.type === 'confetti');
+        
+        // Should spawn confetti particles
+        expect(confettiParticles.length).toBeGreaterThan(0);
+    });
+
+    it('should spawn confetti count between 20-30', () => {
+        ParticleSystem.clear();
+        
+        ParticleSystem.createConfetti();
+        
+        const confettiParticles = ParticleSystem.particles.filter(p => p.type === 'confetti');
+        
+        expect(confettiParticles.length).toBeGreaterThanOrEqual(20);
+        expect(confettiParticles.length).toBeLessThanOrEqual(30);
+    });
+
+    it('should have confetti with multiple colors', () => {
+        ParticleSystem.clear();
+        
+        ParticleSystem.createConfetti();
+        
+        const confettiParticles = ParticleSystem.particles.filter(p => p.type === 'confetti');
+        
+        // Collect unique colors
+        const colors = new Set();
+        for (const particle of confettiParticles) {
+            colors.add(particle.color);
+        }
+        
+        // Should have multiple different colors (at least 3)
+        expect(colors.size).toBeGreaterThanOrEqual(3);
+    });
+
+    it('should have confetti with downward velocity', () => {
+        ParticleSystem.clear();
+        
+        ParticleSystem.createConfetti();
+        
+        const confettiParticles = ParticleSystem.particles.filter(p => p.type === 'confetti');
+        
+        // All confetti should have downward (positive) velocity
+        for (const particle of confettiParticles) {
+            expect(particle.velocityY).toBeGreaterThan(0);
+        }
+    });
+
+    it('should have confetti with varying rotation speeds', () => {
+        ParticleSystem.clear();
+        
+        ParticleSystem.createConfetti();
+        
+        const confettiParticles = ParticleSystem.particles.filter(p => p.type === 'confetti');
+        
+        // Collect unique rotation speeds
+        const rotationSpeeds = new Set();
+        for (const particle of confettiParticles) {
+            rotationSpeeds.add(particle.rotationSpeed);
+        }
+        
+        // Should have varying rotation speeds (at least 5 different values)
+        expect(rotationSpeeds.size).toBeGreaterThanOrEqual(5);
     });
 });
 

@@ -182,8 +182,8 @@
   - Test explosion particles radiate outward
   - _Requirements: 4.1, 4.4, 5.1, 5.2_
 
-- [ ] 7. Implement sparkle and confetti particle effects
-- [ ] 7.1 Implement sparkle particle effect
+- [x] 7. Implement sparkle and confetti particle effects
+- [x] 7.1 Implement sparkle particle effect
   - Add createSparkle method to ParticleSystem
   - Spawn 5-10 particles on collectible collection
   - Set upward velocity and rotation for each particle
@@ -191,7 +191,7 @@
   - Trigger on coin/collectible collection
   - _Requirements: 6.1, 6.2, 6.4, 6.5_
 
-- [ ] 7.2 Implement confetti particle effect
+- [x] 7.2 Implement confetti particle effect
   - Add createConfetti method to ParticleSystem
   - Spawn 20-30 particles across screen on new high score
   - Set falling motion with gravity and rotation
@@ -200,15 +200,15 @@
   - Trigger only once per high score achievement
   - _Requirements: 7.1, 7.2, 7.4, 7.5_
 
-- [ ] 7.3 Write property test for sparkle count constraint
+- [x] 7.3 Write property test for sparkle count constraint
   - **Property 25: Sparkle count constraint**
   - **Validates: Requirements 6.4**
 
-- [ ] 7.4 Write property test for confetti count constraint
+- [x] 7.4 Write property test for confetti count constraint
   - **Property 30: Confetti count constraint**
   - **Validates: Requirements 7.4**
 
-- [ ] 7.5 Write unit tests for sparkle and confetti effects
+- [x] 7.5 Write unit tests for sparkle and confetti effects
   - Test sparkle spawns on collection
   - Test sparkle count between 5-10
   - Test confetti spawns on new high score

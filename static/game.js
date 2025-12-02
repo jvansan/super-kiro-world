@@ -307,6 +307,11 @@ const ParticleSystem = {
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
             
+            // Apply gravity to confetti particles
+            if (particle.type === 'confetti') {
+                particle.velocityY += 0.15; // Gravity effect
+            }
+            
             // Update position
             particle.x += particle.velocityX;
             particle.y += particle.velocityY;
@@ -321,8 +326,13 @@ const ParticleSystem = {
             particle.lifetime++;
         }
         
-        // Remove dead particles (opacity <= 0)
-        this.particles = this.particles.filter(particle => particle.opacity > 0);
+        // Remove dead particles (opacity <= 0 or confetti off-screen)
+        this.particles = this.particles.filter(particle => {
+            if (particle.opacity <= 0) return false;
+            // Remove confetti that falls below visible screen
+            if (particle.type === 'confetti' && particle.y > 700) return false;
+            return true;
+        });
     },
     
     // Render all particles
@@ -396,6 +406,61 @@ const ParticleSystem = {
                 rotation: Math.random() * Math.PI * 2,
                 rotationSpeed: (Math.random() - 0.5) * 0.2,
                 type: 'explosion'
+            });
+        }
+    },
+    
+    // Create sparkle particle effect
+    createSparkle(x, y) {
+        // Spawn 5-10 particles with upward motion
+        const particleCount = Math.floor(Math.random() * 6) + 5; // 5-10 particles
+        
+        for (let i = 0; i < particleCount; i++) {
+            // Random angle with upward bias
+            const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI; // Upward cone
+            const speed = 1 + Math.random() * 2; // Speed 1-3
+            
+            this.createParticle({
+                x: x,
+                y: y,
+                velocityX: Math.cos(angle) * speed,
+                velocityY: Math.sin(angle) * speed,
+                size: 3 + Math.random() * 4, // Varying sizes 3-7
+                color: ['#FFD700', '#FFA500', '#FFFF00', '#FFE4B5'][Math.floor(Math.random() * 4)], // Gold/yellow colors
+                opacity: 1.0,
+                fadeRate: 0.02 + Math.random() * 0.01, // Varying fade rates
+                rotation: Math.random() * Math.PI * 2,
+                rotationSpeed: (Math.random() - 0.5) * 0.3, // Rotation for sparkle effect
+                type: 'sparkle'
+            });
+        }
+    },
+    
+    // Create confetti particle effect
+    createConfetti() {
+        // Spawn 20-30 particles across screen
+        const particleCount = Math.floor(Math.random() * 11) + 20; // 20-30 particles
+        
+        // Multiple colors for confetti
+        const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#790ECB'];
+        
+        for (let i = 0; i < particleCount; i++) {
+            // Spawn across the screen width (relative to camera)
+            const spawnX = camera.x + Math.random() * canvas.width;
+            const spawnY = -20 - Math.random() * 100; // Start above screen
+            
+            this.createParticle({
+                x: spawnX,
+                y: spawnY,
+                velocityX: (Math.random() - 0.5) * 2, // Slight horizontal drift
+                velocityY: 2 + Math.random() * 2, // Falling motion (2-4)
+                size: 4 + Math.random() * 4, // Varying sizes 4-8
+                color: colors[Math.floor(Math.random() * colors.length)], // Random color
+                opacity: 1.0,
+                fadeRate: 0.005, // Slow fade for longer visibility
+                rotation: Math.random() * Math.PI * 2,
+                rotationSpeed: (Math.random() - 0.5) * 0.4, // Varying rotation speeds
+                type: 'confetti'
             });
         }
     },
@@ -757,6 +822,11 @@ function checkCoins() {
             coin.collected = true;
             gameState.score += 10;
             updateHUD();
+            // Spawn sparkle effect at coin position
+            ParticleSystem.createSparkle(
+                coin.x + coin.width / 2,
+                coin.y + coin.height / 2
+            );
         }
     });
 }
@@ -819,6 +889,11 @@ function updateHUD() {
         gameState.highScore = gameState.score;
         if (StorageManager.updateHighScore(gameState.score)) {
             gameState.newHighScore = true;
+            // Trigger confetti only once per high score achievement
+            if (!gameState.confettiTriggered) {
+                ParticleSystem.createConfetti();
+                gameState.confettiTriggered = true;
+            }
         }
     }
 }
