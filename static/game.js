@@ -357,6 +357,49 @@ const ParticleSystem = {
         }
     },
     
+    // Create trail particle effect
+    createTrail(x, y) {
+        this.createParticle({
+            x: x,
+            y: y,
+            velocityX: 0,
+            velocityY: 0,
+            size: 6,
+            color: '#790ECB', // Kiro purple
+            opacity: 0.6,
+            fadeRate: 0.03,
+            rotation: 0,
+            rotationSpeed: 0,
+            type: 'trail'
+        });
+    },
+    
+    // Create explosion particle effect
+    createExplosion(x, y) {
+        // Spawn 8-12 particles radiating outward
+        const particleCount = Math.floor(Math.random() * 5) + 8; // 8-12 particles
+        
+        for (let i = 0; i < particleCount; i++) {
+            // Calculate angle for even distribution
+            const angle = (Math.PI * 2 * i) / particleCount;
+            const speed = 2 + Math.random() * 2; // Random speed 2-4
+            
+            this.createParticle({
+                x: x,
+                y: y,
+                velocityX: Math.cos(angle) * speed,
+                velocityY: Math.sin(angle) * speed,
+                size: 4 + Math.random() * 4, // Size 4-8
+                color: ['#FF0000', '#FF6600', '#FFAA00', '#FF3300'][Math.floor(Math.random() * 4)], // Red/orange colors
+                opacity: 1.0,
+                fadeRate: 0.025,
+                rotation: Math.random() * Math.PI * 2,
+                rotationSpeed: (Math.random() - 0.5) * 0.2,
+                type: 'explosion'
+            });
+        }
+    },
+    
     // Clear all particles (for testing/reset)
     clear() {
         this.particles = [];
@@ -473,6 +516,7 @@ const player = {
     friction: 0.8,
     onGround: false,
     jumpsRemaining: 2,  // NEW: Available jumps for double jump mechanic
+    trailTimer: 0,      // NEW: Timer for trail particle spawning
     image: new Image()
 };
 
@@ -578,6 +622,22 @@ function updatePlayer() {
     player.x += player.velocityX;
     player.y += player.velocityY;
     
+    // Spawn trail particles when moving horizontally
+    const movementThreshold = 0.5; // Minimum velocity to spawn trails
+    if (Math.abs(player.velocityX) > movementThreshold) {
+        player.trailTimer++;
+        // Spawn trail every 3 frames
+        if (player.trailTimer >= 3) {
+            ParticleSystem.createTrail(
+                player.x + player.width / 2,
+                player.y + player.height / 2
+            );
+            player.trailTimer = 0;
+        }
+    } else {
+        player.trailTimer = 0;
+    }
+    
     // Reset ground state
     player.onGround = false;
     
@@ -669,7 +729,7 @@ function updateEnemies() {
         
         // Check collision with player
         if (checkCollision(player, enemy)) {
-            // Player jumps on enemy
+            // Player jumps on enemy (from above)
             if (player.velocityY > 0 && player.y + player.height - player.velocityY <= enemy.y + 10) {
                 enemy.alive = false;
                 player.velocityY = -8;
@@ -677,8 +737,13 @@ function updateEnemies() {
                 updateHUD();
                 // Reset jumps when bouncing off enemy
                 JumpController.resetJumps(player);
+                // No explosion when defeating enemy from above
             } else {
-                // Player gets hit
+                // Player gets hit from side/below - spawn explosion
+                ParticleSystem.createExplosion(
+                    player.x + player.width / 2,
+                    player.y + player.height / 2
+                );
                 loseLife();
             }
         }
@@ -733,6 +798,7 @@ function loseLife() {
         player.velocityX = 0;
         player.velocityY = 0;
         player.jumpsRemaining = 2;
+        player.trailTimer = 0;
     }
 }
 
@@ -935,10 +1001,13 @@ function restartGame() {
     player.velocityX = 0;
     player.velocityY = 0;
     player.jumpsRemaining = 2;
+    player.trailTimer = 0;
     
     coins.forEach(coin => coin.collected = false);
     extraLives.forEach(life => life.collected = false);
     enemies.forEach(enemy => enemy.alive = true);
+    
+    ParticleSystem.clear(); // Clear all particles on restart
     
     document.getElementById('gameOver').classList.add('hidden');
     document.getElementById('levelComplete').classList.add('hidden');

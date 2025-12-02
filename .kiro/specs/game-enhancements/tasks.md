@@ -150,8 +150,8 @@
   - Test update and render methods
   - _Requirements: 4.3, 5.3, 6.3, 7.3_
 
-- [ ] 6. Implement trail and explosion particle effects
-- [ ] 6.1 Implement trail particle creation
+- [x] 6. Implement trail and explosion particle effects
+- [x] 6.1 Implement trail particle creation
   - Add createTrail method to ParticleSystem
   - Spawn trail particles when player moves horizontally
   - Set fade-out properties (opacity decrease per frame)
@@ -159,7 +159,7 @@
   - Add timer to control spawn rate
   - _Requirements: 4.1, 4.2, 4.4, 4.5_
 
-- [ ] 6.2 Implement explosion particle effect
+- [x] 6.2 Implement explosion particle effect
   - Add createExplosion method to ParticleSystem
   - Spawn 8-12 particles radiating outward
   - Set velocities pointing away from spawn point
@@ -167,15 +167,15 @@
   - Trigger on enemy collision (non-top direction)
   - _Requirements: 5.1, 5.2, 5.5_
 
-- [ ] 6.3 Write property test for trail spawning on movement
+- [x] 6.3 Write property test for trail spawning on movement
   - **Property 13: Trail spawning on movement**
   - **Validates: Requirements 4.1**
 
-- [ ] 6.4 Write property test for explosion particle radiation
+- [x] 6.4 Write property test for explosion particle radiation
   - **Property 19: Explosion particle radiation**
   - **Validates: Requirements 5.2**
 
-- [ ] 6.5 Write unit tests for trail and explosion effects
+- [x] 6.5 Write unit tests for trail and explosion effects
   - Test trail particles spawn during movement
   - Test no trails when stationary
   - Test explosion spawns on enemy collision

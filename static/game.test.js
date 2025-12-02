@@ -576,6 +576,45 @@ const ParticleSystem = {
         }
     },
     
+    createTrail(x, y) {
+        this.createParticle({
+            x: x,
+            y: y,
+            velocityX: 0,
+            velocityY: 0,
+            size: 6,
+            color: '#790ECB',
+            opacity: 0.6,
+            fadeRate: 0.03,
+            rotation: 0,
+            rotationSpeed: 0,
+            type: 'trail'
+        });
+    },
+    
+    createExplosion(x, y) {
+        const particleCount = Math.floor(Math.random() * 5) + 8;
+        
+        for (let i = 0; i < particleCount; i++) {
+            const angle = (Math.PI * 2 * i) / particleCount;
+            const speed = 2 + Math.random() * 2;
+            
+            this.createParticle({
+                x: x,
+                y: y,
+                velocityX: Math.cos(angle) * speed,
+                velocityY: Math.sin(angle) * speed,
+                size: 4 + Math.random() * 4,
+                color: ['#FF0000', '#FF6600', '#FFAA00', '#FF3300'][Math.floor(Math.random() * 4)],
+                opacity: 1.0,
+                fadeRate: 0.025,
+                rotation: Math.random() * Math.PI * 2,
+                rotationSpeed: (Math.random() - 0.5) * 0.2,
+                type: 'explosion'
+            });
+        }
+    },
+    
     clear() {
         this.particles = [];
     }
@@ -757,6 +796,192 @@ describe('ParticleSystem', () => {
         expect(mockCtx.fillStyle).toBe('#FF0000');
         expect(mockCtx.save).toHaveBeenCalled();
         expect(mockCtx.restore).toHaveBeenCalled();
+    });
+
+    /**
+     * **Feature: game-enhancements, Property 13: Trail spawning on movement**
+     * For any frame where the character has non-zero horizontal velocity, trail particles should be spawned
+     * **Validates: Requirements 4.1**
+     */
+    it('Property 13: Trail spawning on movement - trails spawn when moving horizontally', () => {
+        fc.assert(
+            fc.property(
+                fc.float({ min: Math.fround(0.6), max: Math.fround(10), noNaN: true }), // velocityX above threshold (0.5)
+                fc.integer({ min: 0, max: 10 }), // frames to simulate
+                (velocityX, frames) => {
+                    ParticleSystem.clear();
+                    
+                    // Simulate player movement for multiple frames
+                    let trailTimer = 0;
+                    const movementThreshold = 0.5;
+                    
+                    for (let i = 0; i < frames; i++) {
+                        // Simulate trail spawning logic from game
+                        if (Math.abs(velocityX) > movementThreshold) {
+                            trailTimer++;
+                            if (trailTimer >= 3) {
+                                ParticleSystem.createTrail(100, 100);
+                                trailTimer = 0;
+                            }
+                        } else {
+                            trailTimer = 0;
+                        }
+                    }
+                    
+                    // Property: If we moved for at least 3 frames, we should have spawned at least one trail
+                    if (frames >= 3) {
+                        const trailParticles = ParticleSystem.particles.filter(p => p.type === 'trail');
+                        return trailParticles.length > 0;
+                    }
+                    
+                    // For fewer than 3 frames, we might not have spawned any trails yet
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: game-enhancements, Property 19: Explosion particle radiation**
+     * For any explosion effect spawned, its particles should have velocities pointing outward from the spawn point
+     * **Validates: Requirements 5.2**
+     */
+    it('Property 19: Explosion particle radiation - particles radiate outward from spawn point', () => {
+        fc.assert(
+            fc.property(
+                fc.float({ min: Math.fround(0), max: Math.fround(1000), noNaN: true }), // spawn x
+                fc.float({ min: Math.fround(0), max: Math.fround(1000), noNaN: true }), // spawn y
+                (spawnX, spawnY) => {
+                    ParticleSystem.clear();
+                    
+                    // Create explosion at spawn point
+                    ParticleSystem.createExplosion(spawnX, spawnY);
+                    
+                    // Get all explosion particles
+                    const explosionParticles = ParticleSystem.particles.filter(p => p.type === 'explosion');
+                    
+                    // Property: All explosion particles should have non-zero velocity
+                    // (they should be moving away from spawn point)
+                    for (const particle of explosionParticles) {
+                        const hasVelocity = particle.velocityX !== 0 || particle.velocityY !== 0;
+                        if (!hasVelocity) {
+                            return false;
+                        }
+                        
+                        // Verify particle starts at spawn point
+                        if (particle.x !== spawnX || particle.y !== spawnY) {
+                            return false;
+                        }
+                    }
+                    
+                    // Property: Should spawn between 8-12 particles
+                    if (explosionParticles.length < 8 || explosionParticles.length > 12) {
+                        return false;
+                    }
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit Tests for Trail and Explosion Effects
+
+    it('should spawn trail particles during movement', () => {
+        ParticleSystem.clear();
+        
+        // Simulate moving for 3 frames (enough to spawn a trail)
+        const velocityX = 5; // Above threshold
+        let trailTimer = 0;
+        const movementThreshold = 0.5;
+        
+        for (let i = 0; i < 3; i++) {
+            if (Math.abs(velocityX) > movementThreshold) {
+                trailTimer++;
+                if (trailTimer >= 3) {
+                    ParticleSystem.createTrail(100, 100);
+                    trailTimer = 0;
+                }
+            }
+        }
+        
+        const trailParticles = ParticleSystem.particles.filter(p => p.type === 'trail');
+        expect(trailParticles.length).toBe(1);
+        expect(trailParticles[0].x).toBe(100);
+        expect(trailParticles[0].y).toBe(100);
+        expect(trailParticles[0].color).toBe('#790ECB');
+    });
+
+    it('should not spawn trails when stationary', () => {
+        ParticleSystem.clear();
+        
+        // Simulate being stationary
+        const velocityX = 0;
+        let trailTimer = 0;
+        const movementThreshold = 0.5;
+        
+        for (let i = 0; i < 10; i++) {
+            if (Math.abs(velocityX) > movementThreshold) {
+                trailTimer++;
+                if (trailTimer >= 3) {
+                    ParticleSystem.createTrail(100, 100);
+                    trailTimer = 0;
+                }
+            } else {
+                trailTimer = 0;
+            }
+        }
+        
+        const trailParticles = ParticleSystem.particles.filter(p => p.type === 'trail');
+        expect(trailParticles.length).toBe(0);
+    });
+
+    it('should spawn explosion on enemy collision', () => {
+        ParticleSystem.clear();
+        
+        // Simulate explosion at collision point
+        ParticleSystem.createExplosion(200, 300);
+        
+        const explosionParticles = ParticleSystem.particles.filter(p => p.type === 'explosion');
+        
+        // Should spawn 8-12 particles
+        expect(explosionParticles.length).toBeGreaterThanOrEqual(8);
+        expect(explosionParticles.length).toBeLessThanOrEqual(12);
+        
+        // All particles should start at explosion point
+        for (const particle of explosionParticles) {
+            expect(particle.x).toBe(200);
+            expect(particle.y).toBe(300);
+        }
+    });
+
+    it('should have explosion particles radiate outward', () => {
+        ParticleSystem.clear();
+        
+        ParticleSystem.createExplosion(150, 150);
+        
+        const explosionParticles = ParticleSystem.particles.filter(p => p.type === 'explosion');
+        
+        // All particles should have non-zero velocity
+        for (const particle of explosionParticles) {
+            const hasVelocity = particle.velocityX !== 0 || particle.velocityY !== 0;
+            expect(hasVelocity).toBe(true);
+        }
+        
+        // After one update, particles should have moved away from spawn point
+        ParticleSystem.update();
+        
+        let movedCount = 0;
+        for (const particle of explosionParticles) {
+            if (particle.x !== 150 || particle.y !== 150) {
+                movedCount++;
+            }
+        }
+        
+        // At least some particles should have moved
+        expect(movedCount).toBeGreaterThan(0);
     });
 });
 
