@@ -1,0 +1,88 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #0a0a0a;
+    font-family: 'Arial', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    color: white;
+}
+
+.game-container {
+    position: relative;
+}
+
+canvas {
+    display: block;
+    background: #87CEEB;
+    border: 4px solid #790ECB;
+    box-shadow: 0 0 20px rgba(121, 14, 203, 0.5);
+}
+
+.hud {
+    display: flex;
+    justify-content: space-between;
+    padding: 15px 20px;
+    background: rgba(10, 10, 10, 0.9);
+    border: 2px solid #790ECB;
+    border-bottom: none;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.score, .lives {
+    color: white;
+}
+
+.score span, .lives span {
+    color: #790ECB;
+}
+
+.overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(10, 10, 10, 0.95);
+    padding: 40px 60px;
+    border: 4px solid #790ECB;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 0 30px rgba(121, 14, 203, 0.8);
+}
+
+.overlay h1 {
+    color: #790ECB;
+    margin-bottom: 20px;
+    font-size: 36px;
+}
+
+.overlay p {
+    margin-bottom: 20px;
+    font-size: 20px;
+}
+
+.overlay button {
+    background: #790ECB;
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    font-size: 18px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background 0.3s;
+}
+
+.overlay button:hover {
+    background: #9a3ee0;
+}
+
+.hidden {
+    display: none;
+}
