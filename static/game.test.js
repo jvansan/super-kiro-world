@@ -1402,3 +1402,273 @@ describe('LeaderboardAPI', () => {
         });
     });
 });
+
+// AnimationController implementation (copied from game.js for testing)
+const AnimationController = {
+    updateState(player) {
+        if (player.velocityY < -1) {
+            player.animationState = 'flying';
+        } else if (player.velocityY > 1 && !player.onGround) {
+            player.animationState = 'falling';
+        } else if (Math.abs(player.velocityX) > 0.5) {
+            player.animationState = 'running';
+        } else {
+            player.animationState = 'idle';
+        }
+    },
+    
+    applyFlyingPhysics(player) {
+        if (player.onGround) {
+            player.rotation = 0;
+            return;
+        }
+        
+        // Apex float effect - reduce gravity when near peak of jump
+        if (Math.abs(player.velocityY) < 2) {
+            player.velocityY += player.gravity * 0.3;
+        } else if (player.velocityY > 0) {
+            player.velocityY += player.gravity * 0.7;
+        } else {
+            player.velocityY += player.gravity;
+        }
+        
+        // Calculate sprite rotation based on vertical velocity
+        const maxRotation = Math.PI / 6;
+        const rotationFactor = player.velocityY / 15;
+        player.rotation = Math.max(-maxRotation, Math.min(maxRotation, rotationFactor));
+    }
+};
+
+describe('AnimationController', () => {
+    /**
+     * **Feature: game-enhancements, Property 34: Reduced gravity on descent**
+     * For any player state where vertical velocity is positive (descending) and not on ground,
+     * the applied gravity should be less than the base gravity value
+     * **Validates: Requirements 8.3**
+     */
+    it('Property 34: Reduced gravity on descent - gravity is reduced when descending', () => {
+        fc.assert(
+            fc.property(
+                fc.float({ min: Math.fround(0.1), max: Math.fround(2.0), noNaN: true }), // base gravity
+                fc.float({ min: Math.fround(0.1), max: Math.fround(20), noNaN: true }), // initial descending velocity (positive)
+                (baseGravity, initialVelocityY) => {
+                    // Create player in descending state (not at apex)
+                    const player = {
+                        velocityY: initialVelocityY,
+                        gravity: baseGravity,
+                        onGround: false,
+                        rotation: 0
+                    };
+                    
+                    const velocityBefore = player.velocityY;
+                    
+                    // Apply flying physics
+                    AnimationController.applyFlyingPhysics(player);
+                    
+                    const velocityAfter = player.velocityY;
+                    const gravityApplied = velocityAfter - velocityBefore;
+                    
+                    // Property: When descending (velocityY > 0 and not at apex),
+                    // applied gravity should be less than base gravity
+                    if (initialVelocityY >= 2) {
+                        // Not at apex, should apply reduced gravity (70%)
+                        const expectedGravity = baseGravity * 0.7;
+                        return Math.abs(gravityApplied - expectedGravity) < 0.001;
+                    }
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: game-enhancements, Property 35: Sprite rotation based on velocity**
+     * For any player state in flying mode, the sprite rotation should correspond to
+     * the direction of vertical velocity
+     * **Validates: Requirements 8.4**
+     */
+    it('Property 35: Sprite rotation based on velocity - rotation matches velocity direction', () => {
+        fc.assert(
+            fc.property(
+                fc.float({ min: Math.fround(0.1), max: Math.fround(2.0), noNaN: true }), // base gravity
+                fc.float({ min: Math.fround(-20), max: Math.fround(20), noNaN: true }), // vertical velocity
+                (baseGravity, velocityY) => {
+                    // Create player in airborne state
+                    const player = {
+                        velocityY: velocityY,
+                        gravity: baseGravity,
+                        onGround: false,
+                        rotation: 0
+                    };
+                    
+                    // Apply flying physics
+                    AnimationController.applyFlyingPhysics(player);
+                    
+                    // Property: Rotation sign should match velocity direction
+                    // Positive velocity (descending) -> positive rotation (tilt down)
+                    // Negative velocity (ascending) -> negative rotation (tilt up)
+                    // Zero velocity -> near zero rotation
+                    
+                    if (velocityY > 1) {
+                        // Descending - rotation should be positive (or zero)
+                        return player.rotation >= 0;
+                    } else if (velocityY < -1) {
+                        // Ascending - rotation should be negative (or zero)
+                        return player.rotation <= 0;
+                    } else {
+                        // Near zero velocity - rotation should be small
+                        return Math.abs(player.rotation) < Math.PI / 6;
+                    }
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit Tests
+
+    it('should set flying state when ascending', () => {
+        const player = {
+            velocityY: -5,
+            velocityX: 0,
+            onGround: false,
+            animationState: 'idle'
+        };
+
+        AnimationController.updateState(player);
+
+        expect(player.animationState).toBe('flying');
+    });
+
+    it('should set falling state when descending', () => {
+        const player = {
+            velocityY: 5,
+            velocityX: 0,
+            onGround: false,
+            animationState: 'idle'
+        };
+
+        AnimationController.updateState(player);
+
+        expect(player.animationState).toBe('falling');
+    });
+
+    it('should set running state when moving horizontally', () => {
+        const player = {
+            velocityY: 0,
+            velocityX: 3,
+            onGround: true,
+            animationState: 'idle'
+        };
+
+        AnimationController.updateState(player);
+
+        expect(player.animationState).toBe('running');
+    });
+
+    it('should set idle state when stationary', () => {
+        const player = {
+            velocityY: 0,
+            velocityX: 0,
+            onGround: true,
+            animationState: 'running'
+        };
+
+        AnimationController.updateState(player);
+
+        expect(player.animationState).toBe('idle');
+    });
+
+    it('should reduce gravity at jump apex', () => {
+        const player = {
+            velocityY: 1, // Near zero (at apex)
+            gravity: 0.5,
+            onGround: false,
+            rotation: 0
+        };
+
+        const velocityBefore = player.velocityY;
+        AnimationController.applyFlyingPhysics(player);
+        const gravityApplied = player.velocityY - velocityBefore;
+
+        // Should apply 30% of normal gravity
+        expect(gravityApplied).toBeCloseTo(0.5 * 0.3, 2);
+    });
+
+    it('should reduce gravity during descent', () => {
+        const player = {
+            velocityY: 5, // Descending
+            gravity: 0.5,
+            onGround: false,
+            rotation: 0
+        };
+
+        const velocityBefore = player.velocityY;
+        AnimationController.applyFlyingPhysics(player);
+        const gravityApplied = player.velocityY - velocityBefore;
+
+        // Should apply 70% of normal gravity
+        expect(gravityApplied).toBeCloseTo(0.5 * 0.7, 2);
+    });
+
+    it('should apply normal gravity when ascending', () => {
+        const player = {
+            velocityY: -5, // Ascending
+            gravity: 0.5,
+            onGround: false,
+            rotation: 0
+        };
+
+        const velocityBefore = player.velocityY;
+        AnimationController.applyFlyingPhysics(player);
+        const gravityApplied = player.velocityY - velocityBefore;
+
+        // Should apply full gravity
+        expect(gravityApplied).toBeCloseTo(0.5, 2);
+    });
+
+    it('should calculate sprite rotation based on velocity', () => {
+        const player = {
+            velocityY: 15, // Descending fast
+            gravity: 0.5,
+            onGround: false,
+            rotation: 0
+        };
+
+        AnimationController.applyFlyingPhysics(player);
+
+        // Rotation should be positive (tilting down) and within max rotation
+        expect(player.rotation).toBeGreaterThan(0);
+        expect(player.rotation).toBeLessThanOrEqual(Math.PI / 6);
+    });
+
+    it('should reset rotation when on ground', () => {
+        const player = {
+            velocityY: 5,
+            gravity: 0.5,
+            onGround: true,
+            rotation: 0.5 // Some rotation from being airborne
+        };
+
+        AnimationController.applyFlyingPhysics(player);
+
+        // Rotation should be reset to 0
+        expect(player.rotation).toBe(0);
+    });
+
+    it('should clamp rotation to max rotation', () => {
+        const player = {
+            velocityY: 100, // Very high velocity
+            gravity: 0.5,
+            onGround: false,
+            rotation: 0
+        };
+
+        AnimationController.applyFlyingPhysics(player);
+
+        // Rotation should not exceed max rotation (PI/6)
+        expect(Math.abs(player.rotation)).toBeLessThanOrEqual(Math.PI / 6);
+    });
+});

@@ -499,6 +499,53 @@ const JumpController = {
     }
 };
 
+// AnimationController - Manages flying animation and physics
+const AnimationController = {
+    // Update animation state based on velocity
+    updateState(player) {
+        if (player.velocityY < -1) {
+            // Ascending - flying up
+            player.animationState = 'flying';
+        } else if (player.velocityY > 1 && !player.onGround) {
+            // Descending - falling
+            player.animationState = 'falling';
+        } else if (Math.abs(player.velocityX) > 0.5) {
+            // Moving horizontally on ground
+            player.animationState = 'running';
+        } else {
+            // Stationary
+            player.animationState = 'idle';
+        }
+    },
+    
+    // Apply flying physics for floaty feel
+    applyFlyingPhysics(player) {
+        if (player.onGround) {
+            // Reset rotation when on ground
+            player.rotation = 0;
+            return;
+        }
+        
+        // Apex float effect - reduce gravity when near peak of jump
+        if (Math.abs(player.velocityY) < 2) {
+            // At apex - apply minimal gravity for float effect
+            player.velocityY += player.gravity * 0.3; // 30% of normal gravity
+        } else if (player.velocityY > 0) {
+            // Descending - apply reduced gravity for floaty feel
+            player.velocityY += player.gravity * 0.7; // 70% of normal gravity
+        } else {
+            // Ascending - normal gravity
+            player.velocityY += player.gravity;
+        }
+        
+        // Calculate sprite rotation based on vertical velocity
+        // Tilt up when ascending, tilt down when descending
+        const maxRotation = Math.PI / 6; // 30 degrees max
+        const rotationFactor = player.velocityY / 15; // Scale velocity to rotation
+        player.rotation = Math.max(-maxRotation, Math.min(maxRotation, rotationFactor));
+    }
+};
+
 // Audio Manager - Handles background music and sound effects
 const AudioManager = {
     bgMusic: null,
@@ -582,6 +629,8 @@ const player = {
     onGround: false,
     jumpsRemaining: 2,  // NEW: Available jumps for double jump mechanic
     trailTimer: 0,      // NEW: Timer for trail particle spawning
+    animationState: 'idle',  // NEW: Current animation state (idle, running, flying, falling)
+    rotation: 0,        // NEW: Sprite rotation for flying effect
     image: new Image()
 };
 
@@ -678,10 +727,29 @@ function updatePlayer() {
     }
     
     // Jump - use JumpController for double jump mechanic
+    const wasJumping = player.jumpsRemaining < 2;
     JumpController.handleJump(player, keys);
+    const justDoubleJumped = wasJumping && player.jumpsRemaining === 0;
     
-    // Apply gravity
-    player.velocityY += player.gravity;
+    // Apply flying physics when airborne (replaces normal gravity)
+    if (!player.onGround) {
+        AnimationController.applyFlyingPhysics(player);
+    } else {
+        // Normal gravity when on ground (though this shouldn't apply)
+        player.velocityY += player.gravity;
+    }
+    
+    // Update animation state
+    AnimationController.updateState(player);
+    
+    // Enhanced visual effect for double jump (spawn extra particles)
+    if (justDoubleJumped) {
+        // Spawn sparkle effect at player position for double jump
+        ParticleSystem.createSparkle(
+            player.x + player.width / 2,
+            player.y + player.height / 2
+        );
+    }
     
     // Update position
     player.x += player.velocityX;
@@ -869,6 +937,8 @@ function loseLife() {
         player.velocityY = 0;
         player.jumpsRemaining = 2;
         player.trailTimer = 0;
+        player.animationState = 'idle';
+        player.rotation = 0;
     }
 }
 
@@ -900,7 +970,21 @@ function updateHUD() {
 
 // Draw functions
 function drawPlayer() {
+    ctx.save();
+    
+    // Apply rotation for flying effect
+    if (player.rotation !== 0) {
+        const centerX = player.x - camera.x + player.width / 2;
+        const centerY = player.y + player.height / 2;
+        
+        ctx.translate(centerX, centerY);
+        ctx.rotate(player.rotation);
+        ctx.translate(-centerX, -centerY);
+    }
+    
     ctx.drawImage(player.image, player.x - camera.x, player.y, player.width, player.height);
+    
+    ctx.restore();
 }
 
 function drawPlatforms() {
@@ -1077,6 +1161,8 @@ function restartGame() {
     player.velocityY = 0;
     player.jumpsRemaining = 2;
     player.trailTimer = 0;
+    player.animationState = 'idle';
+    player.rotation = 0;
     
     coins.forEach(coin => coin.collected = false);
     extraLives.forEach(life => life.collected = false);
