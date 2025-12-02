@@ -12,17 +12,31 @@
             <div class="score">Score: <span id="score">0</span></div>
             <div class="high-score">High Score: <span id="highScore">0</span></div>
             <div class="lives">Lives: <span id="lives">3</span></div>
+            <button id="musicToggle" class="music-toggle" onclick="toggleMusic()">🔊 Music On</button>
         </div>
         <canvas id="gameCanvas"></canvas>
         <div id="gameOver" class="overlay hidden">
             <h1>Game Over!</h1>
             <p>Final Score: <span id="finalScore">0</span></p>
+            <button onclick="showNamePrompt()">Submit Score</button>
             <button onclick="restartGame()">Restart</button>
         </div>
         <div id="levelComplete" class="overlay hidden">
             <h1>Level Complete!</h1>
             <p>Score: <span id="completeScore">0</span></p>
+            <button onclick="showNamePrompt()">Submit Score</button>
             <button onclick="restartGame()">Play Again</button>
+        </div>
+        <div id="namePrompt" class="overlay hidden">
+            <h2>Enter Your Name</h2>
+            <input type="text" id="playerNameInput" placeholder="Your name" maxlength="20" />
+            <div id="submitStatus"></div>
+            <button onclick="submitScoreWithName()">Submit</button>
+            <button onclick="skipLeaderboard()">Skip</button>
+        </div>
+        <div id="leaderboardOverlay" class="overlay hidden">
+            <div id="leaderboardContent"></div>
+            <button onclick="LeaderboardUI.hide()">Close</button>
         </div>
     </div>
     <script src="/static/game.js"></script>

@@ -64,6 +64,297 @@ const StorageManager = {
     }
 };
 
+// LeaderboardAPI - Handles communication with backend API
+const LeaderboardAPI = {
+    BASE_URL: '/api/leaderboard',
+    TIMEOUT_MS: 5000,
+    
+    // Submit score to backend
+    async submitScore(score, playerName) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.TIMEOUT_MS);
+            
+            const response = await fetch(this.BASE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    score: score,
+                    playerName: playerName
+                }),
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                // Handle different error status codes
+                if (response.status >= 500) {
+                    throw new Error('Server error - leaderboard service temporarily unavailable');
+                } else if (response.status === 429) {
+                    throw new Error('Too many requests - please wait a moment');
+                } else if (response.status === 400) {
+                    throw new Error('Invalid score data');
+                } else {
+                    throw new Error(`Failed to submit score (${response.status})`);
+                }
+            }
+            
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            return this.handleError(error);
+        }
+    },
+    
+    // Get top leaderboard entries
+    async getLeaderboard(limit = 10) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.TIMEOUT_MS);
+            
+            const response = await fetch(`${this.BASE_URL}?limit=${limit}`, {
+                method: 'GET',
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                // Handle different error status codes
+                if (response.status >= 500) {
+                    throw new Error('Server error - leaderboard service temporarily unavailable');
+                } else {
+                    throw new Error(`Failed to fetch leaderboard (${response.status})`);
+                }
+            }
+            
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            return this.handleError(error);
+        }
+    },
+    
+    // Handle API errors
+    handleError(error) {
+        let userMessage;
+        
+        if (error.name === 'AbortError') {
+            userMessage = 'Request timed out - please check your connection';
+            console.error('API timeout:', error);
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            userMessage = 'Unable to connect to leaderboard server - please check your connection';
+            console.error('Network error:', error);
+        } else if (error.message) {
+            userMessage = error.message;
+            console.error('API error:', error);
+        } else {
+            userMessage = 'An unexpected error occurred';
+            console.error('Unknown error:', error);
+        }
+        
+        // Return error object that can be checked by caller
+        return {
+            error: true,
+            message: userMessage
+        };
+    }
+};
+
+// LeaderboardUI - Manages leaderboard display interface
+const LeaderboardUI = {
+    currentSessionId: null,
+    
+    // Show leaderboard
+    async show(currentScore, currentSessionId) {
+        this.currentSessionId = currentSessionId;
+        const overlay = document.getElementById('leaderboardOverlay');
+        const content = document.getElementById('leaderboardContent');
+        
+        // Show loading state
+        content.innerHTML = '<div class="loading">Loading leaderboard...</div>';
+        overlay.classList.remove('hidden');
+        
+        // Fetch leaderboard data
+        const result = await LeaderboardAPI.getLeaderboard(10);
+        
+        if (result.error) {
+            this.showError(result.message);
+            return;
+        }
+        
+        // Render leaderboard
+        this.renderLeaderboard(result, currentScore);
+    },
+    
+    // Render leaderboard entries
+    renderLeaderboard(entries, currentScore) {
+        const content = document.getElementById('leaderboardContent');
+        
+        if (!entries || entries.length === 0) {
+            content.innerHTML = '<div class="empty">No scores yet. Be the first!</div>';
+            return;
+        }
+        
+        let html = '<div class="leaderboard-list">';
+        html += '<h2>Top Scores</h2>';
+        html += '<div class="leaderboard-entries">';
+        
+        entries.forEach((entry, index) => {
+            const isCurrent = entry.id === this.currentSessionId;
+            html += this.formatEntry(entry, index + 1, isCurrent);
+        });
+        
+        html += '</div>';
+        html += '</div>';
+        
+        content.innerHTML = html;
+    },
+    
+    // Format a single leaderboard entry
+    formatEntry(entry, rank, isCurrent) {
+        const highlightClass = isCurrent ? 'current-session' : '';
+        const date = new Date(entry.timestamp);
+        const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        
+        return `
+            <div class="leaderboard-entry ${highlightClass}">
+                <span class="rank">#${rank}</span>
+                <span class="player-name">${this.escapeHtml(entry.playerName)}</span>
+                <span class="score">${entry.score}</span>
+                <span class="date">${dateStr}</span>
+            </div>
+        `;
+    },
+    
+    // Show error message
+    showError(message) {
+        const content = document.getElementById('leaderboardContent');
+        content.innerHTML = `
+            <div class="error">
+                <p>${this.escapeHtml(message)}</p>
+                <button onclick="LeaderboardUI.retry()">Retry</button>
+                <button onclick="LeaderboardUI.hide()">Close</button>
+            </div>
+        `;
+    },
+    
+    // Retry loading leaderboard
+    async retry() {
+        const content = document.getElementById('leaderboardContent');
+        content.innerHTML = '<div class="loading">Loading leaderboard...</div>';
+        
+        const result = await LeaderboardAPI.getLeaderboard(10);
+        
+        if (result.error) {
+            this.showError(result.message);
+        } else {
+            this.renderLeaderboard(result, null);
+        }
+    },
+    
+    // Hide leaderboard
+    hide() {
+        const overlay = document.getElementById('leaderboardOverlay');
+        overlay.classList.add('hidden');
+    },
+    
+    // Escape HTML to prevent XSS
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+};
+
+// JumpController - Manages double jump mechanic
+const JumpController = {
+    // Handle jump input
+    handleJump(player, keys) {
+        // Check if jump button is pressed
+        const jumpPressed = keys['ArrowUp'] || keys['w'] || keys[' '];
+        
+        if (jumpPressed && player.jumpsRemaining > 0) {
+            // Apply jump velocity
+            player.velocityY = -player.jumpPower;
+            // Decrement available jumps
+            player.jumpsRemaining--;
+            // Clear ground state since we're jumping
+            player.onGround = false;
+        }
+    },
+    
+    // Reset jumps when landing
+    resetJumps(player) {
+        player.jumpsRemaining = 2;
+    },
+    
+    // Check if player can jump
+    canJump(player) {
+        return player.jumpsRemaining > 0;
+    }
+};
+
+// Audio Manager - Handles background music and sound effects
+const AudioManager = {
+    bgMusic: null,
+    musicEnabled: true,
+    
+    // Initialize audio
+    init() {
+        this.bgMusic = new Audio('/background-music.wav');
+        this.bgMusic.loop = true;
+        this.bgMusic.volume = 0.3; // Set to 30% volume
+        
+        // Load music state from localStorage
+        const savedState = localStorage.getItem('musicEnabled');
+        if (savedState !== null) {
+            this.musicEnabled = JSON.parse(savedState);
+        }
+    },
+    
+    // Play background music
+    playMusic() {
+        if (this.musicEnabled && this.bgMusic) {
+            this.bgMusic.play().catch(err => {
+                console.log('Audio playback failed:', err);
+            });
+        }
+    },
+    
+    // Pause background music
+    pauseMusic() {
+        if (this.bgMusic) {
+            this.bgMusic.pause();
+        }
+    },
+    
+    // Toggle music on/off
+    toggleMusic() {
+        this.musicEnabled = !this.musicEnabled;
+        localStorage.setItem('musicEnabled', JSON.stringify(this.musicEnabled));
+        
+        if (this.musicEnabled) {
+            this.playMusic();
+        } else {
+            this.pauseMusic();
+        }
+        
+        return this.musicEnabled;
+    },
+    
+    // Restart music from beginning
+    restartMusic() {
+        if (this.bgMusic) {
+            this.bgMusic.currentTime = 0;
+            this.playMusic();
+        }
+    }
+};
+
 // Game state
 let gameState = {
     score: 0,
@@ -88,6 +379,7 @@ const player = {
     gravity: 0.45,
     friction: 0.8,
     onGround: false,
+    jumpsRemaining: 2,  // NEW: Available jumps for double jump mechanic
     image: new Image()
 };
 
@@ -170,6 +462,7 @@ const endFlag = { x: 2700, y: 470, width: 40, height: 80 };
 // Initialize game
 initCoins();
 gameState.highScore = StorageManager.getHighScore();
+AudioManager.init();
 
 // Update player
 function updatePlayer() {
@@ -182,11 +475,8 @@ function updatePlayer() {
         player.velocityX *= player.friction;
     }
     
-    // Jump
-    if ((keys['ArrowUp'] || keys['w'] || keys[' ']) && player.onGround) {
-        player.velocityY = -player.jumpPower;
-        player.onGround = false;
-    }
+    // Jump - use JumpController for double jump mechanic
+    JumpController.handleJump(player, keys);
     
     // Apply gravity
     player.velocityY += player.gravity;
@@ -219,6 +509,8 @@ function checkPlatformCollisions() {
                 player.y = platform.y - player.height;
                 player.velocityY = 0;
                 player.onGround = true;
+                // Reset jumps when landing
+                JumpController.resetJumps(player);
             }
             // Hitting from below
             else if (player.velocityY < 0 && player.y - player.velocityY >= platform.y + platform.height) {
@@ -245,6 +537,8 @@ function checkMovingPlatformCollisions() {
                 player.velocityY = 0;
                 player.onGround = true;
                 player.x += platform.speed * platform.direction;
+                // Reset jumps when landing
+                JumpController.resetJumps(player);
             }
         }
     });
@@ -288,6 +582,8 @@ function updateEnemies() {
                 player.velocityY = -8;
                 gameState.score += 50;
                 updateHUD();
+                // Reset jumps when bouncing off enemy
+                JumpController.resetJumps(player);
             } else {
                 // Player gets hit
                 loseLife();
@@ -343,6 +639,7 @@ function loseLife() {
         player.y = 400;
         player.velocityX = 0;
         player.velocityY = 0;
+        player.jumpsRemaining = 2;
     }
 }
 
@@ -476,6 +773,54 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
+// Show name prompt for leaderboard submission
+function showNamePrompt() {
+    document.getElementById('gameOver').classList.add('hidden');
+    document.getElementById('levelComplete').classList.add('hidden');
+    document.getElementById('namePrompt').classList.remove('hidden');
+    document.getElementById('playerNameInput').focus();
+    document.getElementById('submitStatus').textContent = '';
+}
+
+// Submit score with player name
+async function submitScoreWithName() {
+    const nameInput = document.getElementById('playerNameInput');
+    const playerName = nameInput.value.trim();
+    const statusDiv = document.getElementById('submitStatus');
+    
+    if (!playerName) {
+        statusDiv.textContent = 'Please enter your name';
+        statusDiv.style.color = '#ff6b6b';
+        return;
+    }
+    
+    // Show submitting status
+    statusDiv.textContent = 'Submitting...';
+    statusDiv.style.color = 'white';
+    
+    // Submit score to backend
+    const result = await LeaderboardAPI.submitScore(gameState.score, playerName);
+    
+    if (result.error) {
+        // Show error but allow retry
+        statusDiv.textContent = result.message;
+        statusDiv.style.color = '#ff6b6b';
+        return;
+    }
+    
+    // Success - hide name prompt and show leaderboard
+    document.getElementById('namePrompt').classList.add('hidden');
+    
+    // Show leaderboard with current session highlighted
+    await LeaderboardUI.show(gameState.score, result.id);
+}
+
+// Skip leaderboard submission
+function skipLeaderboard() {
+    document.getElementById('namePrompt').classList.add('hidden');
+    restartGame();
+}
+
 // Restart game
 function restartGame() {
     const currentHighScore = gameState.highScore;
@@ -494,6 +839,7 @@ function restartGame() {
     player.y = 400;
     player.velocityX = 0;
     player.velocityY = 0;
+    player.jumpsRemaining = 2;
     
     coins.forEach(coin => coin.collected = false);
     extraLives.forEach(life => life.collected = false);
@@ -501,11 +847,39 @@ function restartGame() {
     
     document.getElementById('gameOver').classList.add('hidden');
     document.getElementById('levelComplete').classList.add('hidden');
+    document.getElementById('namePrompt').classList.add('hidden');
+    document.getElementById('leaderboardOverlay').classList.add('hidden');
     
+    AudioManager.restartMusic();
     updateHUD();
     gameLoop();
 }
 
-// Start game
+// Toggle music (can be called from UI)
+function toggleMusic() {
+    const enabled = AudioManager.toggleMusic();
+    const button = document.getElementById('musicToggle');
+    if (button) {
+        button.textContent = enabled ? '🔊 Music On' : '🔇 Music Off';
+    }
+}
+
+// Start game on first user interaction (required for autoplay)
+let gameStarted = false;
+function startGame() {
+    if (!gameStarted) {
+        gameStarted = true;
+        AudioManager.playMusic();
+        updateHUD();
+        gameLoop();
+        document.removeEventListener('keydown', startGame);
+        document.removeEventListener('click', startGame);
+    }
+}
+
+// Wait for user interaction before starting
+document.addEventListener('keydown', startGame);
+document.addEventListener('click', startGame);
+
+// Show initial message
 updateHUD();
-gameLoop();

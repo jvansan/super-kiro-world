@@ -59,8 +59,8 @@
   - Test handling corrupted JSON data
   - _Requirements: 1.2, 1.3, 1.4_
 
-- [ ] 3. Implement frontend leaderboard API client
-- [ ] 3.1 Create LeaderboardAPI module
+- [x] 3. Implement frontend leaderboard API client
+- [x] 3.1 Create LeaderboardAPI module
   - Implement submitScore method with POST request
   - Implement getLeaderboard method with GET request
   - Add timeout handling (5 second limit)
@@ -68,7 +68,7 @@
   - Return user-friendly error messages
   - _Requirements: 2.1, 2.3_
 
-- [ ] 3.2 Create LeaderboardUI component
+- [x] 3.2 Create LeaderboardUI component
   - Implement show method with async leaderboard fetching
   - Add loading state display while fetching
   - Implement formatEntry method with rank, player name, score, date
@@ -77,7 +77,7 @@
   - Add hide method to close leaderboard
   - _Requirements: 2.1, 2.2, 2.5_
 
-- [ ] 3.3 Integrate leaderboard with game end flow
+- [x] 3.3 Integrate leaderboard with game end flow
   - Prompt for player name on game end
   - Submit score to backend via LeaderboardAPI
   - Display leaderboard after submission
@@ -85,7 +85,7 @@
   - Update HTML overlay for leaderboard display
   - _Requirements: 2.1, 2.3_
 
-- [ ] 3.4 Write unit tests for LeaderboardAPI
+- [x] 3.4 Write unit tests for LeaderboardAPI
   - Test successful score submission
   - Test successful leaderboard retrieval
   - Test handling network errors
@@ -93,8 +93,8 @@
   - Test timeout handling
   - _Requirements: 2.1, 2.3_
 
-- [ ] 4. Implement double jump mechanic
-- [ ] 4.1 Create JumpController module
+- [x] 4. Implement double jump mechanic
+- [x] 4.1 Create JumpController module
   - Add jumpsRemaining property to player (default 2)
   - Implement handleJump method checking jumpsRemaining
   - Decrement jumpsRemaining on each jump
@@ -102,21 +102,21 @@
   - Apply same jump power for both jumps
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 4.2 Integrate JumpController into game loop
+- [x] 4.2 Integrate JumpController into game loop
   - Replace existing jump logic with JumpController.handleJump
   - Call resetJumps when player lands on platform
   - Update player state to track jump availability
   - _Requirements: 3.1, 3.2_
 
-- [ ] 4.3 Write property test for jump reset on landing
+- [x] 4.3 Write property test for jump reset on landing
   - **Property 9: Jump reset on landing**
   - **Validates: Requirements 3.2**
 
-- [ ] 4.4 Write property test for jump power consistency
+- [x] 4.4 Write property test for jump power consistency
   - **Property 11: Jump power consistency**
   - **Validates: Requirements 3.4**
 
-- [ ] 4.5 Write unit tests for JumpController
+- [x] 4.5 Write unit tests for JumpController
   - Test jump availability after landing
   - Test jump depletion after two jumps
   - Test jump ignored when exhausted
