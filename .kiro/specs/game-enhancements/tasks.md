@@ -34,25 +34,25 @@
   - Test file persistence and loading
   - _Requirements: 2.3, 2.4_
 
-- [-] 2. Implement score persistence and high score tracking
-- [ ] 2.1 Create StorageManager for high score
+- [x] 2. Implement score persistence and high score tracking
+- [x] 2.1 Create StorageManager for high score
   - Implement getHighScore method with default to 0
   - Implement updateHighScore method with comparison logic
   - Add error handling for storage access and corrupted data
   - _Requirements: 1.2, 1.3, 1.4_
 
-- [ ] 2.2 Integrate high score into game state
+- [x] 2.2 Integrate high score into game state
   - Add highScore and newHighScore flags to gameState
   - Load high score on game initialization
   - Update high score when score changes
   - Display both current score and high score in HUD
   - _Requirements: 1.3, 1.5_
 
-- [ ] 2.3 Write property test for high score monotonicity
+- [x] 2.3 Write property test for high score monotonicity
   - **Property 2: High score monotonicity**
   - **Validates: Requirements 1.2**
 
-- [ ] 2.4 Write unit tests for StorageManager
+- [x] 2.4 Write unit tests for StorageManager
   - Test retrieving high score from empty storage
   - Test updating high score when new score is higher
   - Test not updating when new score is lower

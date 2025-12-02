@@ -1,0 +1,13 @@
+{
+  "name": "super-kiro-world",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest --run"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0",
+    "fast-check": "^3.0.0",
+    "jsdom": "^23.0.0"
+  }
+}

@@ -4,12 +4,75 @@ const ctx = canvas.getContext('2d');
 canvas.width = 800;
 canvas.height = 600;
 
+// StorageManager - Handles high score persistence
+const StorageManager = {
+    HIGH_SCORE_KEY: 'superKiroWorld_highScore',
+    
+    // Get high score from local storage
+    getHighScore() {
+        try {
+            const stored = localStorage.getItem(this.HIGH_SCORE_KEY);
+            if (stored === null) {
+                return 0;
+            }
+            const parsed = JSON.parse(stored);
+            // Validate that it's a number
+            if (typeof parsed === 'number' && parsed >= 0) {
+                return parsed;
+            }
+            // Corrupted data - reset to 0
+            console.warn('Corrupted high score data, resetting to 0');
+            this.clearHighScore();
+            return 0;
+        } catch (error) {
+            // Handle JSON parse errors or storage access errors
+            console.error('Error reading high score:', error);
+            this.clearHighScore();
+            return 0;
+        }
+    },
+    
+    // Update high score if new score is higher
+    updateHighScore(newScore) {
+        try {
+            const currentHighScore = this.getHighScore();
+            if (newScore > currentHighScore) {
+                localStorage.setItem(this.HIGH_SCORE_KEY, JSON.stringify(newScore));
+                return true; // New high score achieved
+            }
+            return false; // Not a new high score
+        } catch (error) {
+            // Handle storage quota exceeded or access denied
+            if (error.name === 'QuotaExceededError') {
+                console.warn('Storage quota exceeded - high score not saved');
+            } else if (error.name === 'SecurityError') {
+                console.warn('Storage access denied (private browsing?) - high score not saved');
+            } else {
+                console.error('Error updating high score:', error);
+            }
+            return false;
+        }
+    },
+    
+    // Clear high score (for testing)
+    clearHighScore() {
+        try {
+            localStorage.removeItem(this.HIGH_SCORE_KEY);
+        } catch (error) {
+            console.error('Error clearing high score:', error);
+        }
+    }
+};
+
 // Game state
 let gameState = {
     score: 0,
     lives: 3,
     gameOver: false,
-    levelComplete: false
+    levelComplete: false,
+    highScore: 0,
+    newHighScore: false,
+    confettiTriggered: false
 };
 
 // Player
@@ -106,6 +169,7 @@ const endFlag = { x: 2700, y: 470, width: 40, height: 80 };
 
 // Initialize game
 initCoins();
+gameState.highScore = StorageManager.getHighScore();
 
 // Update player
 function updatePlayer() {
@@ -292,6 +356,15 @@ function updateCamera() {
 function updateHUD() {
     document.getElementById('score').textContent = gameState.score;
     document.getElementById('lives').textContent = gameState.lives;
+    document.getElementById('highScore').textContent = gameState.highScore;
+    
+    // Check if current score exceeds high score
+    if (gameState.score > gameState.highScore) {
+        gameState.highScore = gameState.score;
+        if (StorageManager.updateHighScore(gameState.score)) {
+            gameState.newHighScore = true;
+        }
+    }
 }
 
 // Draw functions
@@ -405,11 +478,16 @@ function gameLoop() {
 
 // Restart game
 function restartGame() {
+    const currentHighScore = gameState.highScore;
+    
     gameState = {
         score: 0,
         lives: 3,
         gameOver: false,
-        levelComplete: false
+        levelComplete: false,
+        highScore: currentHighScore,
+        newHighScore: false,
+        confettiTriggered: false
     };
     
     player.x = 100;
