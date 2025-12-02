@@ -270,6 +270,99 @@ const LeaderboardUI = {
     }
 };
 
+// ParticleSystem - Manages all particle effects
+const ParticleSystem = {
+    particles: [],
+    MAX_PARTICLES: 500,
+    
+    // Create a new particle
+    createParticle(config) {
+        const particle = {
+            x: config.x || 0,
+            y: config.y || 0,
+            velocityX: config.velocityX || 0,
+            velocityY: config.velocityY || 0,
+            size: config.size || 5,
+            color: config.color || '#FFF',
+            opacity: config.opacity !== undefined ? config.opacity : 1.0,
+            fadeRate: config.fadeRate || 0.02,
+            rotation: config.rotation || 0,
+            rotationSpeed: config.rotationSpeed || 0,
+            type: config.type || 'generic',
+            lifetime: 0
+        };
+        
+        // Enforce particle limit - remove oldest particles if at limit
+        if (this.particles.length >= this.MAX_PARTICLES) {
+            this.particles.shift(); // Remove oldest particle
+        }
+        
+        this.particles.push(particle);
+        return particle;
+    },
+    
+    // Update all particles
+    update() {
+        // Update each particle
+        for (let i = 0; i < this.particles.length; i++) {
+            const particle = this.particles[i];
+            
+            // Update position
+            particle.x += particle.velocityX;
+            particle.y += particle.velocityY;
+            
+            // Update opacity
+            particle.opacity -= particle.fadeRate;
+            
+            // Update rotation
+            particle.rotation += particle.rotationSpeed;
+            
+            // Increment lifetime
+            particle.lifetime++;
+        }
+        
+        // Remove dead particles (opacity <= 0)
+        this.particles = this.particles.filter(particle => particle.opacity > 0);
+    },
+    
+    // Render all particles
+    render(ctx, camera) {
+        for (const particle of this.particles) {
+            ctx.save();
+            
+            // Apply camera offset
+            const screenX = particle.x - camera.x;
+            const screenY = particle.y;
+            
+            // Set opacity
+            ctx.globalAlpha = particle.opacity;
+            
+            // Apply rotation if needed
+            if (particle.rotation !== 0) {
+                ctx.translate(screenX, screenY);
+                ctx.rotate(particle.rotation);
+                ctx.translate(-screenX, -screenY);
+            }
+            
+            // Draw particle
+            ctx.fillStyle = particle.color;
+            ctx.fillRect(
+                screenX - particle.size / 2,
+                screenY - particle.size / 2,
+                particle.size,
+                particle.size
+            );
+            
+            ctx.restore();
+        }
+    },
+    
+    // Clear all particles (for testing/reset)
+    clear() {
+        this.particles = [];
+    }
+};
+
 // JumpController - Manages double jump mechanic
 const JumpController = {
     // Handle jump input
@@ -756,6 +849,7 @@ function gameLoop() {
     checkExtraLives();
     checkLevelComplete();
     updateCamera();
+    ParticleSystem.update(); // Update all particles
     
     // Clear canvas
     ctx.fillStyle = '#87CEEB';
@@ -769,6 +863,7 @@ function gameLoop() {
     drawEnemies();
     drawEndFlag();
     drawPlayer();
+    ParticleSystem.render(ctx, camera); // Render all particles
     
     requestAnimationFrame(gameLoop);
 }

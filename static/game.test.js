@@ -506,6 +506,260 @@ describe('JumpController', () => {
     });
 });
 
+// ParticleSystem implementation (copied from game.js for testing)
+const ParticleSystem = {
+    particles: [],
+    MAX_PARTICLES: 500,
+    
+    createParticle(config) {
+        const particle = {
+            x: config.x || 0,
+            y: config.y || 0,
+            velocityX: config.velocityX || 0,
+            velocityY: config.velocityY || 0,
+            size: config.size || 5,
+            color: config.color || '#FFF',
+            opacity: config.opacity !== undefined ? config.opacity : 1.0,
+            fadeRate: config.fadeRate || 0.02,
+            rotation: config.rotation || 0,
+            rotationSpeed: config.rotationSpeed || 0,
+            type: config.type || 'generic',
+            lifetime: 0
+        };
+        
+        if (this.particles.length >= this.MAX_PARTICLES) {
+            this.particles.shift();
+        }
+        
+        this.particles.push(particle);
+        return particle;
+    },
+    
+    update() {
+        for (let i = 0; i < this.particles.length; i++) {
+            const particle = this.particles[i];
+            
+            particle.x += particle.velocityX;
+            particle.y += particle.velocityY;
+            particle.opacity -= particle.fadeRate;
+            particle.rotation += particle.rotationSpeed;
+            particle.lifetime++;
+        }
+        
+        this.particles = this.particles.filter(particle => particle.opacity > 0);
+    },
+    
+    render(ctx, camera) {
+        for (const particle of this.particles) {
+            ctx.save();
+            
+            const screenX = particle.x - camera.x;
+            const screenY = particle.y;
+            
+            ctx.globalAlpha = particle.opacity;
+            
+            if (particle.rotation !== 0) {
+                ctx.translate(screenX, screenY);
+                ctx.rotate(particle.rotation);
+                ctx.translate(-screenX, -screenY);
+            }
+            
+            ctx.fillStyle = particle.color;
+            ctx.fillRect(
+                screenX - particle.size / 2,
+                screenY - particle.size / 2,
+                particle.size,
+                particle.size
+            );
+            
+            ctx.restore();
+        }
+    },
+    
+    clear() {
+        this.particles = [];
+    }
+};
+
+describe('ParticleSystem', () => {
+    beforeEach(() => {
+        ParticleSystem.clear();
+    });
+
+    /**
+     * **Feature: game-enhancements, Property 15: Dead particle removal**
+     * For any trail particle with zero opacity, it should be removed from the particle array
+     * **Validates: Requirements 4.3**
+     */
+    it('Property 15: Dead particle removal - particles with opacity <= 0 are removed', () => {
+        fc.assert(
+            fc.property(
+                fc.array(
+                    fc.record({
+                        opacity: fc.float({ min: -0.5, max: Math.fround(1.5) }),
+                        fadeRate: fc.float({ min: 0, max: Math.fround(0.1) }),
+                        x: fc.float({ min: 0, max: Math.fround(1000) }),
+                        y: fc.float({ min: 0, max: Math.fround(1000) })
+                    }),
+                    { minLength: 1, maxLength: 100 }
+                ),
+                (particleConfigs) => {
+                    ParticleSystem.clear();
+                    
+                    // Create particles with the generated configurations
+                    for (const config of particleConfigs) {
+                        ParticleSystem.createParticle(config);
+                    }
+                    
+                    // Run update to process particles
+                    ParticleSystem.update();
+                    
+                    // Property: After update, no particles should have opacity <= 0
+                    for (const particle of ParticleSystem.particles) {
+                        if (particle.opacity <= 0) {
+                            return false;
+                        }
+                    }
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit Tests
+
+    it('should create a particle with valid parameters', () => {
+        ParticleSystem.clear();
+        
+        const particle = ParticleSystem.createParticle({
+            x: 100,
+            y: 200,
+            velocityX: 2,
+            velocityY: -3,
+            size: 10,
+            color: '#FF0000',
+            opacity: 0.8,
+            fadeRate: 0.05,
+            rotation: 0.5,
+            rotationSpeed: 0.1,
+            type: 'trail'
+        });
+
+        expect(particle.x).toBe(100);
+        expect(particle.y).toBe(200);
+        expect(particle.velocityX).toBe(2);
+        expect(particle.velocityY).toBe(-3);
+        expect(particle.size).toBe(10);
+        expect(particle.color).toBe('#FF0000');
+        expect(particle.opacity).toBe(0.8);
+        expect(particle.fadeRate).toBe(0.05);
+        expect(particle.rotation).toBe(0.5);
+        expect(particle.rotationSpeed).toBe(0.1);
+        expect(particle.type).toBe('trail');
+        expect(particle.lifetime).toBe(0);
+        expect(ParticleSystem.particles.length).toBe(1);
+    });
+
+    it('should remove particle when opacity reaches zero', () => {
+        ParticleSystem.clear();
+        
+        // Create particle with high fade rate
+        ParticleSystem.createParticle({
+            x: 100,
+            y: 100,
+            opacity: 0.05,
+            fadeRate: 0.1
+        });
+
+        expect(ParticleSystem.particles.length).toBe(1);
+
+        // Update should reduce opacity below 0 and remove particle
+        ParticleSystem.update();
+
+        expect(ParticleSystem.particles.length).toBe(0);
+    });
+
+    it('should enforce particle limit of 500', () => {
+        ParticleSystem.clear();
+        
+        // Create 510 particles
+        for (let i = 0; i < 510; i++) {
+            ParticleSystem.createParticle({
+                x: i,
+                y: i,
+                opacity: 1.0,
+                fadeRate: 0.001
+            });
+        }
+
+        // Should only have 500 particles (oldest removed)
+        expect(ParticleSystem.particles.length).toBe(500);
+        
+        // First particle should have x=10 (particles 0-9 were removed)
+        expect(ParticleSystem.particles[0].x).toBe(10);
+    });
+
+    it('should update particle position, opacity, and rotation', () => {
+        ParticleSystem.clear();
+        
+        const particle = ParticleSystem.createParticle({
+            x: 100,
+            y: 200,
+            velocityX: 5,
+            velocityY: -3,
+            opacity: 1.0,
+            fadeRate: 0.02,
+            rotation: 0,
+            rotationSpeed: 0.1
+        });
+
+        ParticleSystem.update();
+
+        expect(particle.x).toBe(105);
+        expect(particle.y).toBe(197);
+        expect(particle.opacity).toBeCloseTo(0.98, 2);
+        expect(particle.rotation).toBeCloseTo(0.1, 2);
+        expect(particle.lifetime).toBe(1);
+    });
+
+    it('should render particles with camera offset', () => {
+        ParticleSystem.clear();
+        
+        // Create mock canvas context
+        const mockCtx = {
+            save: vi.fn(),
+            restore: vi.fn(),
+            translate: vi.fn(),
+            rotate: vi.fn(),
+            fillRect: vi.fn(),
+            fillStyle: '',
+            globalAlpha: 1
+        };
+
+        const camera = { x: 50, y: 0 };
+
+        ParticleSystem.createParticle({
+            x: 150,
+            y: 100,
+            size: 10,
+            color: '#FF0000',
+            opacity: 0.8,
+            rotation: 0
+        });
+
+        ParticleSystem.render(mockCtx, camera);
+
+        // Should apply camera offset (150 - 50 = 100)
+        expect(mockCtx.fillRect).toHaveBeenCalledWith(95, 95, 10, 10);
+        expect(mockCtx.globalAlpha).toBe(0.8);
+        expect(mockCtx.fillStyle).toBe('#FF0000');
+        expect(mockCtx.save).toHaveBeenCalled();
+        expect(mockCtx.restore).toHaveBeenCalled();
+    });
+});
+
 describe('LeaderboardAPI', () => {
     let consoleErrorSpy;
     let fetchMock;

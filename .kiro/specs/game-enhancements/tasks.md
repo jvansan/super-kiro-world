@@ -123,8 +123,8 @@
   - Test double jump while falling
   - _Requirements: 3.1, 3.2, 3.3, 3.5_
 
-- [ ] 5. Implement particle system foundation
-- [ ] 5.1 Create ParticleSystem module with base structure
+- [x] 5. Implement particle system foundation
+- [x] 5.1 Create ParticleSystem module with base structure
   - Define Particle data structure with position, velocity, size, color, opacity, rotation
   - Create particles array to hold active particles
   - Implement update method to update all particles
@@ -133,17 +133,17 @@
   - Implement 500 particle limit with oldest-first removal
   - _Requirements: 4.3, 5.3, 6.3, 7.3_
 
-- [ ] 5.2 Integrate ParticleSystem into game loop
+- [x] 5.2 Integrate ParticleSystem into game loop
   - Call ParticleSystem.update in game loop
   - Call ParticleSystem.render in draw cycle
   - Pass camera offset to render method
   - _Requirements: 4.1, 5.1, 6.1, 7.1_
 
-- [ ] 5.3 Write property test for dead particle removal
+- [x] 5.3 Write property test for dead particle removal
   - **Property 15: Dead particle removal**
   - **Validates: Requirements 4.3**
 
-- [ ] 5.4 Write unit tests for ParticleSystem
+- [x] 5.4 Write unit tests for ParticleSystem
   - Test particle creation with valid parameters
   - Test particle removal when opacity reaches zero
   - Test particle limit enforcement (max 500)
