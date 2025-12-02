@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Validate & Commit Completed Tasks",
+  "description": "When a task is completed, this hook validates the correctness of the implementation and commits the changes to git with an appropriate commit message",
+  "version": "1",
+  "when": {
+    "type": "agentEnd"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A task has just been completed. Please:\n1. Review the changes that were made to validate correctness\n2. Run any relevant tests to ensure the implementation works\n3. If validation passes, commit the changes to git with a clear, descriptive commit message that explains what was accomplished\n4. If validation fails, report the issues found and do not commit"
+  }
+}
