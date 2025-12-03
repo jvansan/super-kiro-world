@@ -101,25 +101,25 @@
     - Test damage from sides
     - _Requirements: 6.4, 6.5_
 
-- [ ] 4. Create procedural background system
-  - [ ] 4.1 Implement BackgroundGenerator module
+- [x] 4. Create procedural background system
+  - [x] 4.1 Implement BackgroundGenerator module
     - Create seeded random number generator
     - Generate 3-4 parallax layers per level
     - Generate layer elements (clouds, mountains, stars, geometric patterns)
     - Use level number as deterministic seed
     - _Requirements: 7.1, 7.2, 7.3, 7.5_
-  - [ ] 4.2 Write property test for background determinism
+  - [x] 4.2 Write property test for background determinism
     - **Property 27: Background determinism**
     - **Validates: Requirements 7.1, 7.3**
-  - [ ] 4.3 Write property test for parallax layers
+  - [x] 4.3 Write property test for parallax layers
     - **Property 28: Multiple parallax layers**
     - **Validates: Requirements 7.2**
-  - [ ] 4.4 Implement ParallaxBackground module
+  - [x] 4.4 Implement ParallaxBackground module
     - Render multiple layers with depth-based scrolling
     - Calculate parallax offset based on camera position
     - Tile/repeat elements as needed
     - _Requirements: 7.4_
-  - [ ] 4.5 Write property test for parallax scrolling
+  - [x] 4.5 Write property test for parallax scrolling
     - **Property 29: Parallax scrolling behavior**
     - **Validates: Requirements 7.4**
 

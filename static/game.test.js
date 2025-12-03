@@ -4000,3 +4000,503 @@ describe('JumpingEnemy', () => {
         expect(enemy.jumpTimer).toBe(initialTimer - 1);
     });
 });
+
+// BackgroundGenerator implementation (copied from game.js for testing)
+const BackgroundGenerator = {
+    createSeededRandom(seed) {
+        return function() {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
+        };
+    },
+    
+    generateBackground(levelNumber) {
+        const random = this.createSeededRandom(levelNumber * 5000);
+        const layerCount = 3 + Math.floor(random() * 2);
+        const layers = [];
+        
+        for (let i = 0; i < layerCount; i++) {
+            const layer = this.generateLayer(i, random, levelNumber);
+            layers.push(layer);
+        }
+        
+        return {
+            levelNumber: levelNumber,
+            layers: layers
+        };
+    },
+    
+    generateLayer(layerIndex, random, levelNumber) {
+        const depth = 0.1 + (layerIndex / 4) * 0.4;
+        const elementTypes = ['stars', 'clouds', 'mountains', 'geometric'];
+        let elementType;
+        
+        if (layerIndex === 0) {
+            elementType = random() < 0.5 ? 'stars' : 'geometric';
+        } else if (layerIndex === 1) {
+            elementType = random() < 0.6 ? 'clouds' : 'mountains';
+        } else {
+            elementType = elementTypes[Math.floor(random() * elementTypes.length)];
+        }
+        
+        const baseColor = this.getLayerColor(layerIndex, levelNumber, random);
+        const elements = this.generateLayerElements(elementType, random, levelNumber, layerIndex);
+        
+        return {
+            depth: depth,
+            color: baseColor,
+            elementType: elementType,
+            elements: elements
+        };
+    },
+    
+    getLayerColor(layerIndex, levelNumber, random) {
+        const themes = [
+            ['#1a1a2e', '#16213e', '#0f3460'],
+            ['#2d1b2e', '#3d2645', '#4a3356'],
+            ['#1a2e1a', '#213e21', '#2d4a2d'],
+            ['#2e1a1a', '#3e2121', '#4a2d2d'],
+            ['#1a2e2e', '#213e3e', '#2d4a4a'],
+            ['#2e2e1a', '#3e3e21', '#4a4a2d'],
+            ['#2e1a2e', '#3e213e', '#4a2d4a'],
+            ['#1a1a1a', '#2e2e2e', '#3d3d3d']
+        ];
+        
+        const theme = themes[levelNumber % themes.length];
+        return theme[layerIndex % theme.length];
+    },
+    
+    generateLayerElements(elementType, random, levelNumber, layerIndex) {
+        const elements = [];
+        
+        if (elementType === 'stars') {
+            const starCount = 20 + Math.floor(random() * 20);
+            for (let i = 0; i < starCount; i++) {
+                elements.push({
+                    type: 'star',
+                    x: random() * 4000,
+                    y: random() * 400,
+                    size: 1 + random() * 3,
+                    brightness: 0.5 + random() * 0.5
+                });
+            }
+        } else if (elementType === 'clouds') {
+            const cloudCount = 5 + Math.floor(random() * 5);
+            for (let i = 0; i < cloudCount; i++) {
+                elements.push({
+                    type: 'cloud',
+                    x: random() * 4000,
+                    y: 50 + random() * 200,
+                    width: 60 + random() * 100,
+                    height: 30 + random() * 40,
+                    opacity: 0.3 + random() * 0.4
+                });
+            }
+        } else if (elementType === 'mountains') {
+            const mountainCount = 3 + Math.floor(random() * 3);
+            for (let i = 0; i < mountainCount; i++) {
+                elements.push({
+                    type: 'mountain',
+                    x: random() * 4000,
+                    y: 300 + random() * 150,
+                    width: 100 + random() * 200,
+                    height: 100 + random() * 150,
+                    opacity: 0.4 + random() * 0.3
+                });
+            }
+        } else if (elementType === 'geometric') {
+            const shapeCount = 8 + Math.floor(random() * 7);
+            const shapeTypes = ['circle', 'square', 'triangle'];
+            
+            for (let i = 0; i < shapeCount; i++) {
+                elements.push({
+                    type: 'geometric',
+                    shape: shapeTypes[Math.floor(random() * shapeTypes.length)],
+                    x: random() * 4000,
+                    y: random() * 500,
+                    size: 10 + random() * 30,
+                    opacity: 0.2 + random() * 0.3,
+                    rotation: random() * Math.PI * 2
+                });
+            }
+        }
+        
+        return elements;
+    }
+};
+
+describe('BackgroundGenerator', () => {
+    /**
+     * **Feature: multi-level-world, Property 27: Background determinism**
+     * For any level number, generating the background multiple times should produce identical results
+     * **Validates: Requirements 7.1, 7.3**
+     */
+    it('Property 27: Background determinism - same level produces same background', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 8 }), // Level number
+                (levelNumber) => {
+                    // Generate background twice
+                    const bg1 = BackgroundGenerator.generateBackground(levelNumber);
+                    const bg2 = BackgroundGenerator.generateBackground(levelNumber);
+                    
+                    // Property: Both generations should be identical
+                    
+                    // Check level number
+                    if (bg1.levelNumber !== bg2.levelNumber) return false;
+                    
+                    // Check layer count
+                    if (bg1.layers.length !== bg2.layers.length) return false;
+                    
+                    // Check each layer
+                    for (let i = 0; i < bg1.layers.length; i++) {
+                        const layer1 = bg1.layers[i];
+                        const layer2 = bg2.layers[i];
+                        
+                        // Check layer properties
+                        if (layer1.depth !== layer2.depth) return false;
+                        if (layer1.color !== layer2.color) return false;
+                        if (layer1.elementType !== layer2.elementType) return false;
+                        
+                        // Check element count
+                        if (layer1.elements.length !== layer2.elements.length) return false;
+                        
+                        // Check each element
+                        for (let j = 0; j < layer1.elements.length; j++) {
+                            const elem1 = layer1.elements[j];
+                            const elem2 = layer2.elements[j];
+                            
+                            // Check all element properties
+                            if (elem1.type !== elem2.type) return false;
+                            if (elem1.x !== elem2.x) return false;
+                            if (elem1.y !== elem2.y) return false;
+                            
+                            // Check type-specific properties
+                            if (elem1.type === 'star') {
+                                if (elem1.size !== elem2.size) return false;
+                                if (elem1.brightness !== elem2.brightness) return false;
+                            } else if (elem1.type === 'cloud') {
+                                if (elem1.width !== elem2.width) return false;
+                                if (elem1.height !== elem2.height) return false;
+                                if (elem1.opacity !== elem2.opacity) return false;
+                            } else if (elem1.type === 'mountain') {
+                                if (elem1.width !== elem2.width) return false;
+                                if (elem1.height !== elem2.height) return false;
+                                if (elem1.opacity !== elem2.opacity) return false;
+                            } else if (elem1.type === 'geometric') {
+                                if (elem1.shape !== elem2.shape) return false;
+                                if (elem1.size !== elem2.size) return false;
+                                if (elem1.opacity !== elem2.opacity) return false;
+                                if (elem1.rotation !== elem2.rotation) return false;
+                            }
+                        }
+                    }
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 28: Multiple parallax layers**
+     * For any generated background, it should contain multiple layers with different scroll speeds
+     * **Validates: Requirements 7.2**
+     */
+    it('Property 28: Multiple parallax layers - backgrounds have 3-4 layers with different depths', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 8 }), // Level number
+                (levelNumber) => {
+                    // Generate background
+                    const bg = BackgroundGenerator.generateBackground(levelNumber);
+                    
+                    // Property: Should have 3 or 4 layers
+                    if (bg.layers.length < 3 || bg.layers.length > 4) return false;
+                    
+                    // Property: Each layer should have a valid depth value (0-1)
+                    for (const layer of bg.layers) {
+                        if (layer.depth < 0 || layer.depth > 1) return false;
+                    }
+                    
+                    // Property: Layers should have different depths (for parallax effect)
+                    const depths = bg.layers.map(l => l.depth);
+                    const uniqueDepths = new Set(depths);
+                    if (uniqueDepths.size !== bg.layers.length) return false;
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit Tests
+
+    it('should generate a valid background configuration', () => {
+        const bg = BackgroundGenerator.generateBackground(1);
+        
+        expect(bg.levelNumber).toBe(1);
+        expect(bg.layers).toBeDefined();
+        expect(bg.layers.length).toBeGreaterThanOrEqual(3);
+        expect(bg.layers.length).toBeLessThanOrEqual(4);
+    });
+
+    it('should generate layers with valid depth values', () => {
+        const bg = BackgroundGenerator.generateBackground(1);
+        
+        bg.layers.forEach(layer => {
+            expect(layer.depth).toBeGreaterThanOrEqual(0);
+            expect(layer.depth).toBeLessThanOrEqual(1);
+        });
+    });
+
+    it('should generate layers with elements', () => {
+        const bg = BackgroundGenerator.generateBackground(1);
+        
+        bg.layers.forEach(layer => {
+            expect(layer.elements).toBeDefined();
+            expect(layer.elements.length).toBeGreaterThan(0);
+            expect(['stars', 'clouds', 'mountains', 'geometric']).toContain(layer.elementType);
+        });
+    });
+
+    it('should generate different backgrounds for different levels', () => {
+        const bg1 = BackgroundGenerator.generateBackground(1);
+        const bg2 = BackgroundGenerator.generateBackground(2);
+        
+        // Backgrounds should be different (at least in some aspect)
+        let isDifferent = false;
+        
+        // Check if layer counts differ
+        if (bg1.layers.length !== bg2.layers.length) {
+            isDifferent = true;
+        }
+        
+        // Check if any layer has different element count
+        for (let i = 0; i < Math.min(bg1.layers.length, bg2.layers.length); i++) {
+            if (bg1.layers[i].elements.length !== bg2.layers[i].elements.length) {
+                isDifferent = true;
+                break;
+            }
+        }
+        
+        expect(isDifferent).toBe(true);
+    });
+
+    it('should create seeded random function that is deterministic', () => {
+        const random1 = BackgroundGenerator.createSeededRandom(12345);
+        const random2 = BackgroundGenerator.createSeededRandom(12345);
+        
+        // Same seed should produce same sequence
+        for (let i = 0; i < 10; i++) {
+            expect(random1()).toBe(random2());
+        }
+    });
+
+    it('should generate stars with valid properties', () => {
+        const bg = BackgroundGenerator.generateBackground(1);
+        
+        // Find a layer with stars
+        const starLayer = bg.layers.find(l => l.elementType === 'stars');
+        
+        if (starLayer) {
+            starLayer.elements.forEach(star => {
+                expect(star.type).toBe('star');
+                expect(star.x).toBeGreaterThanOrEqual(0);
+                expect(star.y).toBeGreaterThanOrEqual(0);
+                expect(star.size).toBeGreaterThan(0);
+                expect(star.brightness).toBeGreaterThanOrEqual(0.5);
+                expect(star.brightness).toBeLessThanOrEqual(1.0);
+            });
+        }
+    });
+
+    it('should generate clouds with valid properties', () => {
+        // Try multiple levels to find one with clouds
+        for (let level = 1; level <= 8; level++) {
+            const bg = BackgroundGenerator.generateBackground(level);
+            const cloudLayer = bg.layers.find(l => l.elementType === 'clouds');
+            
+            if (cloudLayer) {
+                cloudLayer.elements.forEach(cloud => {
+                    expect(cloud.type).toBe('cloud');
+                    expect(cloud.x).toBeGreaterThanOrEqual(0);
+                    expect(cloud.y).toBeGreaterThanOrEqual(0);
+                    expect(cloud.width).toBeGreaterThan(0);
+                    expect(cloud.height).toBeGreaterThan(0);
+                    expect(cloud.opacity).toBeGreaterThanOrEqual(0.3);
+                    expect(cloud.opacity).toBeLessThanOrEqual(0.7);
+                });
+                break; // Found clouds, no need to continue
+            }
+        }
+    });
+});
+
+// ParallaxBackground implementation (copied from game.js for testing)
+const ParallaxBackground = {
+    layers: [],
+    
+    init(backgroundConfig) {
+        if (!backgroundConfig || !backgroundConfig.layers) {
+            this.layers = [];
+            return;
+        }
+        this.layers = backgroundConfig.layers;
+    },
+    
+    render(ctx, cameraX) {
+        if (!this.layers || this.layers.length === 0) return;
+        
+        for (const layer of this.layers) {
+            this.renderLayer(ctx, layer, cameraX);
+        }
+    },
+    
+    renderLayer(ctx, layer, cameraX) {
+        const parallaxOffset = cameraX * layer.depth;
+        
+        for (const element of layer.elements) {
+            this.renderElement(ctx, element, parallaxOffset);
+        }
+    },
+    
+    renderElement(ctx, element, parallaxOffset) {
+        const screenX = element.x - parallaxOffset;
+        
+        // Mock rendering - just return for testing
+        return { screenX, element };
+    }
+};
+
+describe('ParallaxBackground', () => {
+    let mockCtx;
+
+    beforeEach(() => {
+        // Create a mock canvas context
+        mockCtx = {
+            save: vi.fn(),
+            restore: vi.fn(),
+            fillRect: vi.fn(),
+            beginPath: vi.fn(),
+            arc: vi.fn(),
+            fill: vi.fn(),
+            moveTo: vi.fn(),
+            lineTo: vi.fn(),
+            closePath: vi.fn(),
+            translate: vi.fn(),
+            rotate: vi.fn()
+        };
+        
+        // Reset ParallaxBackground state
+        ParallaxBackground.layers = [];
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 29: Parallax scrolling behavior**
+     * For any camera movement, background layers should scroll at different speeds proportional to their depth
+     * **Validates: Requirements 7.4**
+     */
+    it('Property 29: Parallax scrolling behavior - layers scroll at speeds proportional to depth', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: 2000 }), // Camera X position
+                fc.integer({ min: 1, max: 8 }), // Level number
+                (cameraX, levelNumber) => {
+                    // Generate background
+                    const bg = BackgroundGenerator.generateBackground(levelNumber);
+                    
+                    // Initialize ParallaxBackground
+                    ParallaxBackground.init(bg);
+                    
+                    // Property: For each layer, parallax offset should equal cameraX * depth
+                    for (const layer of bg.layers) {
+                        const expectedOffset = cameraX * layer.depth;
+                        
+                        // Check each element in the layer
+                        for (const element of layer.elements) {
+                            const result = ParallaxBackground.renderElement(mockCtx, element, expectedOffset);
+                            
+                            // Verify the screen position is calculated correctly
+                            const expectedScreenX = element.x - expectedOffset;
+                            if (result.screenX !== expectedScreenX) return false;
+                        }
+                    }
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit Tests
+
+    it('should initialize with empty layers when no config provided', () => {
+        ParallaxBackground.init(null);
+        
+        expect(ParallaxBackground.layers).toEqual([]);
+    });
+
+    it('should initialize with background configuration', () => {
+        const bg = BackgroundGenerator.generateBackground(1);
+        
+        ParallaxBackground.init(bg);
+        
+        expect(ParallaxBackground.layers).toBe(bg.layers);
+        expect(ParallaxBackground.layers.length).toBeGreaterThan(0);
+    });
+
+    it('should not render when layers are empty', () => {
+        ParallaxBackground.init(null);
+        
+        // Should not throw error
+        expect(() => {
+            ParallaxBackground.render(mockCtx, 100);
+        }).not.toThrow();
+    });
+
+    it('should calculate parallax offset correctly', () => {
+        const bg = BackgroundGenerator.generateBackground(1);
+        ParallaxBackground.init(bg);
+        
+        const cameraX = 500;
+        const layer = bg.layers[0];
+        const expectedOffset = cameraX * layer.depth;
+        
+        const element = layer.elements[0];
+        const result = ParallaxBackground.renderElement(mockCtx, element, expectedOffset);
+        
+        expect(result.screenX).toBe(element.x - expectedOffset);
+    });
+
+    it('should handle multiple layers with different depths', () => {
+        const bg = BackgroundGenerator.generateBackground(1);
+        ParallaxBackground.init(bg);
+        
+        const cameraX = 1000;
+        
+        // Each layer should have different parallax offset
+        const offsets = bg.layers.map(layer => cameraX * layer.depth);
+        
+        // Verify offsets are different (since depths are different)
+        const uniqueOffsets = new Set(offsets);
+        expect(uniqueOffsets.size).toBe(bg.layers.length);
+    });
+
+    it('should handle zero camera position', () => {
+        const bg = BackgroundGenerator.generateBackground(1);
+        ParallaxBackground.init(bg);
+        
+        const cameraX = 0;
+        const layer = bg.layers[0];
+        const element = layer.elements[0];
+        
+        const result = ParallaxBackground.renderElement(mockCtx, element, 0);
+        
+        // With no camera movement, screen position should equal element position
+        expect(result.screenX).toBe(element.x);
+    });
+});

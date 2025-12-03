@@ -522,6 +522,266 @@ const LevelGenerator = {
     }
 };
 
+// BackgroundGenerator - Procedurally generates parallax backgrounds
+const BackgroundGenerator = {
+    // Seeded random number generator for deterministic generation
+    createSeededRandom(seed) {
+        return function() {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
+        };
+    },
+    
+    // Generate background configuration for a level
+    generateBackground(levelNumber) {
+        // Use level number as seed for deterministic generation
+        const random = this.createSeededRandom(levelNumber * 5000);
+        
+        // Generate 3-4 parallax layers
+        const layerCount = 3 + Math.floor(random() * 2); // 3 or 4 layers
+        const layers = [];
+        
+        for (let i = 0; i < layerCount; i++) {
+            const layer = this.generateLayer(i, random, levelNumber);
+            layers.push(layer);
+        }
+        
+        return {
+            levelNumber: levelNumber,
+            layers: layers
+        };
+    },
+    
+    // Generate a single parallax layer
+    generateLayer(layerIndex, random, levelNumber) {
+        // Depth determines parallax speed (0 = far/slow, 1 = near/fast)
+        // Further layers move slower
+        const depth = 0.1 + (layerIndex / 4) * 0.4; // Range: 0.1 to 0.5
+        
+        // Choose element type based on layer depth and level
+        const elementTypes = ['stars', 'clouds', 'mountains', 'geometric'];
+        let elementType;
+        
+        if (layerIndex === 0) {
+            // Furthest layer - stars or geometric patterns
+            elementType = random() < 0.5 ? 'stars' : 'geometric';
+        } else if (layerIndex === 1) {
+            // Mid-far layer - clouds or mountains
+            elementType = random() < 0.6 ? 'clouds' : 'mountains';
+        } else {
+            // Closer layers - mix of all types
+            elementType = elementTypes[Math.floor(random() * elementTypes.length)];
+        }
+        
+        // Generate base color based on level number (different themes)
+        const baseColor = this.getLayerColor(layerIndex, levelNumber, random);
+        
+        // Generate elements for this layer
+        const elements = this.generateLayerElements(elementType, random, levelNumber, layerIndex);
+        
+        return {
+            depth: depth,
+            color: baseColor,
+            elementType: elementType,
+            elements: elements
+        };
+    },
+    
+    // Get color for layer based on level theme
+    getLayerColor(layerIndex, levelNumber, random) {
+        // Different color themes for different levels
+        const themes = [
+            ['#1a1a2e', '#16213e', '#0f3460'], // Dark blue theme
+            ['#2d1b2e', '#3d2645', '#4a3356'], // Purple theme
+            ['#1a2e1a', '#213e21', '#2d4a2d'], // Dark green theme
+            ['#2e1a1a', '#3e2121', '#4a2d2d'], // Dark red theme
+            ['#1a2e2e', '#213e3e', '#2d4a4a'], // Teal theme
+            ['#2e2e1a', '#3e3e21', '#4a4a2d'], // Brown theme
+            ['#2e1a2e', '#3e213e', '#4a2d4a'], // Magenta theme
+            ['#1a1a1a', '#2e2e2e', '#3d3d3d']  // Grayscale theme
+        ];
+        
+        const theme = themes[levelNumber % themes.length];
+        return theme[layerIndex % theme.length];
+    },
+    
+    // Generate elements for a layer
+    generateLayerElements(elementType, random, levelNumber, layerIndex) {
+        const elements = [];
+        
+        if (elementType === 'stars') {
+            // Generate 20-40 stars scattered across the layer
+            const starCount = 20 + Math.floor(random() * 20);
+            for (let i = 0; i < starCount; i++) {
+                elements.push({
+                    type: 'star',
+                    x: random() * 4000, // Spread across level width
+                    y: random() * 400,  // Upper portion of screen
+                    size: 1 + random() * 3, // Size 1-4
+                    brightness: 0.5 + random() * 0.5 // Brightness 0.5-1.0
+                });
+            }
+        } else if (elementType === 'clouds') {
+            // Generate 5-10 clouds
+            const cloudCount = 5 + Math.floor(random() * 5);
+            for (let i = 0; i < cloudCount; i++) {
+                elements.push({
+                    type: 'cloud',
+                    x: random() * 4000,
+                    y: 50 + random() * 200, // Upper-mid portion
+                    width: 60 + random() * 100, // Width 60-160
+                    height: 30 + random() * 40,  // Height 30-70
+                    opacity: 0.3 + random() * 0.4 // Opacity 0.3-0.7
+                });
+            }
+        } else if (elementType === 'mountains') {
+            // Generate 3-6 mountain peaks
+            const mountainCount = 3 + Math.floor(random() * 3);
+            for (let i = 0; i < mountainCount; i++) {
+                elements.push({
+                    type: 'mountain',
+                    x: random() * 4000,
+                    y: 300 + random() * 150, // Lower portion
+                    width: 100 + random() * 200, // Width 100-300
+                    height: 100 + random() * 150, // Height 100-250
+                    opacity: 0.4 + random() * 0.3 // Opacity 0.4-0.7
+                });
+            }
+        } else if (elementType === 'geometric') {
+            // Generate 8-15 geometric shapes
+            const shapeCount = 8 + Math.floor(random() * 7);
+            const shapeTypes = ['circle', 'square', 'triangle'];
+            
+            for (let i = 0; i < shapeCount; i++) {
+                elements.push({
+                    type: 'geometric',
+                    shape: shapeTypes[Math.floor(random() * shapeTypes.length)],
+                    x: random() * 4000,
+                    y: random() * 500,
+                    size: 10 + random() * 30, // Size 10-40
+                    opacity: 0.2 + random() * 0.3, // Opacity 0.2-0.5
+                    rotation: random() * Math.PI * 2 // Random rotation
+                });
+            }
+        }
+        
+        return elements;
+    }
+};
+
+// ParallaxBackground - Renders multi-layer scrolling backgrounds
+const ParallaxBackground = {
+    layers: [],
+    
+    // Initialize with background configuration
+    init(backgroundConfig) {
+        if (!backgroundConfig || !backgroundConfig.layers) {
+            this.layers = [];
+            return;
+        }
+        this.layers = backgroundConfig.layers;
+    },
+    
+    // Render all layers
+    render(ctx, cameraX) {
+        if (!this.layers || this.layers.length === 0) return;
+        
+        // Render each layer from back to front
+        for (const layer of this.layers) {
+            this.renderLayer(ctx, layer, cameraX);
+        }
+    },
+    
+    // Render a single layer with parallax offset
+    renderLayer(ctx, layer, cameraX) {
+        // Calculate parallax offset (further layers move slower)
+        const parallaxOffset = cameraX * layer.depth;
+        
+        // Draw base layer color (optional background fill)
+        // Skip this to keep transparent background
+        
+        // Render each element in the layer
+        for (const element of layer.elements) {
+            this.renderElement(ctx, element, parallaxOffset);
+        }
+    },
+    
+    // Render a single element
+    renderElement(ctx, element, parallaxOffset) {
+        ctx.save();
+        
+        // Calculate screen position with parallax
+        const screenX = element.x - parallaxOffset;
+        
+        // Only render if on or near screen (with margin for tiling)
+        if (screenX < -200 || screenX > canvas.width + 200) {
+            ctx.restore();
+            return;
+        }
+        
+        // Set opacity
+        if (element.opacity !== undefined) {
+            ctx.globalAlpha = element.opacity;
+        }
+        
+        // Render based on element type
+        if (element.type === 'star') {
+            // Draw star as a small circle
+            ctx.fillStyle = '#FFFFFF';
+            ctx.globalAlpha = element.brightness || 1.0;
+            ctx.beginPath();
+            ctx.arc(screenX, element.y, element.size, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (element.type === 'cloud') {
+            // Draw cloud as overlapping circles
+            ctx.fillStyle = '#FFFFFF';
+            const circleCount = 3;
+            for (let i = 0; i < circleCount; i++) {
+                const offsetX = (i - 1) * (element.width / 4);
+                const radius = element.height / 2;
+                ctx.beginPath();
+                ctx.arc(screenX + element.width / 2 + offsetX, element.y + radius, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        } else if (element.type === 'mountain') {
+            // Draw mountain as a triangle
+            ctx.fillStyle = '#555555';
+            ctx.beginPath();
+            ctx.moveTo(screenX, element.y + element.height); // Bottom left
+            ctx.lineTo(screenX + element.width / 2, element.y); // Peak
+            ctx.lineTo(screenX + element.width, element.y + element.height); // Bottom right
+            ctx.closePath();
+            ctx.fill();
+        } else if (element.type === 'geometric') {
+            // Draw geometric shape
+            ctx.fillStyle = '#AAAAAA';
+            
+            if (element.rotation) {
+                ctx.translate(screenX, element.y);
+                ctx.rotate(element.rotation);
+                ctx.translate(-screenX, -element.y);
+            }
+            
+            if (element.shape === 'circle') {
+                ctx.beginPath();
+                ctx.arc(screenX, element.y, element.size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (element.shape === 'square') {
+                ctx.fillRect(screenX - element.size / 2, element.y - element.size / 2, element.size, element.size);
+            } else if (element.shape === 'triangle') {
+                ctx.beginPath();
+                ctx.moveTo(screenX, element.y - element.size / 2);
+                ctx.lineTo(screenX + element.size / 2, element.y + element.size / 2);
+                ctx.lineTo(screenX - element.size / 2, element.y + element.size / 2);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+        
+        ctx.restore();
+    }
+};
+
 // GroundEnemy - Patrols horizontally along platforms
 class GroundEnemy {
     constructor(x, y, patrolStart, patrolEnd, speed = 1.5) {
