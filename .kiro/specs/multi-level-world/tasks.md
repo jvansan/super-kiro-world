@@ -1,0 +1,292 @@
+# Implementation Plan: Multi-Level World System
+
+- [-] 1. Create progress persistence system
+  - [ ] 1.1 Implement ProgressStorage module for local storage operations
+    - Create save/load functions for level completion data
+    - Handle corrupted data gracefully with validation
+    - Implement data format versioning
+    - _Requirements: 9.1, 9.2, 9.3, 9.4_
+  - [ ] 1.2 Write property test for progress persistence
+    - **Property 36: Completion status persistence**
+    - **Validates: Requirements 9.1**
+  - [ ] 1.3 Implement LevelProgressionManager module
+    - Track completed levels using Set data structure
+    - Track best scores per level
+    - Implement level unlock logic (level N+1 unlocks when level N completes)
+    - Integrate with ProgressStorage for persistence
+    - _Requirements: 1.3, 1.4, 2.1, 2.3, 9.1, 9.2_
+  - [ ] 1.4 Write property test for level unlocking
+    - **Property 3: Level completion unlocks next level**
+    - **Validates: Requirements 1.4**
+  - [ ] 1.5 Write property test for score tracking
+    - **Property 7: Replay score update**
+    - **Validates: Requirements 2.3**
+
+- [ ] 2. Create level generation system with difficulty scaling
+  - [ ] 2.1 Implement LevelGenerator module
+    - Create deterministic level generation using level number as seed
+    - Generate platform layouts with increasing gap distances
+    - Calculate difficulty multipliers based on level number
+    - Generate collectible placements (coins and extra lives)
+    - Set end flag position based on level length
+    - _Requirements: 3.1, 3.2, 3.4, 3.5_
+  - [ ] 2.2 Write property test for level determinism
+    - **Property 6: Level replay determinism**
+    - **Validates: Requirements 2.2**
+  - [ ] 2.3 Write property test for platform gap scaling
+    - **Property 10: Platform gap scaling**
+    - **Validates: Requirements 3.1**
+  - [ ] 2.4 Write property test for safe platform reduction
+    - **Property 12: Safe platform reduction**
+    - **Validates: Requirements 3.4**
+  - [ ] 2.5 Implement enemy generation in LevelGenerator
+    - Calculate enemy count based on difficulty
+    - Mix enemy types (ground, plasma, jumping)
+    - Place enemies strategically on platforms
+    - Increase enemy density for higher levels
+    - _Requirements: 3.2, 3.3_
+  - [ ] 2.6 Write property test for enemy count scaling
+    - **Property 11: Enemy count scaling**
+    - **Validates: Requirements 3.2**
+
+- [ ] 3. Implement new enemy types
+  - [ ] 3.1 Create GroundEnemy class
+    - Implement horizontal patrol movement
+    - Implement direction reversal at patrol boundaries
+    - Implement collision detection with player
+    - Handle defeat from above (bounce player up)
+    - Handle damage from sides
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+  - [ ] 3.2 Write property test for ground enemy patrol
+    - **Property 13: Ground enemy patrol path assignment**
+    - **Property 14: Ground enemy direction reversal**
+    - **Validates: Requirements 4.1, 4.2**
+  - [ ] 3.3 Write unit tests for ground enemy collision
+    - Test defeat from above with bounce
+    - Test damage from sides
+    - Test point award on defeat
+    - _Requirements: 4.3, 4.4, 4.5_
+  - [ ] 3.4 Create Projectile class
+    - Implement linear movement
+    - Implement collision detection with player
+    - Implement off-screen cleanup
+    - _Requirements: 5.3, 5.4, 5.5_
+  - [ ] 3.5 Create PlasmaShooter class
+    - Implement stationary positioning
+    - Implement player range detection
+    - Implement timed projectile firing
+    - Create projectiles aimed at player position
+    - _Requirements: 5.1, 5.2_
+  - [ ] 3.6 Write property test for projectile behavior
+    - **Property 19: Projectile linear movement**
+    - **Property 21: Projectile off-screen cleanup**
+    - **Validates: Requirements 5.3, 5.5**
+  - [ ] 3.7 Write unit tests for plasma shooter
+    - Test firing at regular intervals
+    - Test range detection
+    - Test projectile creation
+    - _Requirements: 5.2_
+  - [ ] 3.8 Create JumpingEnemy class
+    - Implement random jump timing
+    - Implement jump with random horizontal velocity
+    - Implement timer reset on landing
+    - Implement collision detection with player
+    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
+  - [ ] 3.9 Write property test for jumping enemy timing
+    - **Property 22: Jumping enemy random timing**
+    - **Property 24: Jumping enemy timer reset on landing**
+    - **Validates: Requirements 6.1, 6.3**
+  - [ ] 3.10 Write unit tests for jumping enemy collision
+    - Test defeat from above with bounce
+    - Test damage from sides
+    - _Requirements: 6.4, 6.5_
+
+- [ ] 4. Create procedural background system
+  - [ ] 4.1 Implement BackgroundGenerator module
+    - Create seeded random number generator
+    - Generate 3-4 parallax layers per level
+    - Generate layer elements (clouds, mountains, stars, geometric patterns)
+    - Use level number as deterministic seed
+    - _Requirements: 7.1, 7.2, 7.3, 7.5_
+  - [ ] 4.2 Write property test for background determinism
+    - **Property 27: Background determinism**
+    - **Validates: Requirements 7.1, 7.3**
+  - [ ] 4.3 Write property test for parallax layers
+    - **Property 28: Multiple parallax layers**
+    - **Validates: Requirements 7.2**
+  - [ ] 4.4 Implement ParallaxBackground module
+    - Render multiple layers with depth-based scrolling
+    - Calculate parallax offset based on camera position
+    - Tile/repeat elements as needed
+    - _Requirements: 7.4_
+  - [ ] 4.5 Write property test for parallax scrolling
+    - **Property 29: Parallax scrolling behavior**
+    - **Validates: Requirements 7.4**
+
+- [ ] 5. Create world map system
+  - [ ] 5.1 Implement WorldMap module
+    - Create level node data structure with positions
+    - Implement node rendering with status indicators (locked/unlocked/completed)
+    - Implement keyboard navigation between nodes
+    - Implement camera positioning on selected node
+    - Draw paths connecting sequential nodes
+    - _Requirements: 1.1, 1.2, 2.4, 8.1, 8.2, 8.3, 8.4, 8.5_
+  - [ ] 5.2 Write property test for node status display
+    - **Property 1: All level nodes displayed with status**
+    - **Property 8: Completed level visual distinction**
+    - **Validates: Requirements 1.2, 2.4**
+  - [ ] 5.3 Write unit tests for world map navigation
+    - Test arrow key node selection
+    - Test camera positioning
+    - Test locked level prevention
+    - _Requirements: 1.5, 8.3_
+  - [ ] 5.4 Implement world map visual indicators
+    - Create locked level indicator (lock icon)
+    - Create unlocked level indicator (open circle)
+    - Create completed level indicator (checkmark)
+    - Highlight current player position
+    - _Requirements: 8.3, 8.4, 8.5, 8.1_
+  - [ ] 5.5 Write property test for visual indicators
+    - **Property 33: Locked level indicator**
+    - **Property 34: Available level indicator**
+    - **Property 35: Completed level indicator**
+    - **Validates: Requirements 8.3, 8.4, 8.5**
+
+- [ ] 6. Create transition system
+  - [ ] 6.1 Implement TransitionManager module
+    - Create fade out/fade in transition sequence
+    - Implement input blocking during transitions
+    - Handle callback execution between fade phases
+    - Manage transition alpha progression
+    - _Requirements: 10.1, 10.2, 10.3_
+  - [ ] 6.2 Write property test for input blocking
+    - **Property 40: Input blocking during transition**
+    - **Validates: Requirements 10.3**
+  - [ ] 6.3 Write unit tests for transition phases
+    - Test fade out to fade in sequence
+    - Test callback execution timing
+    - Test alpha value progression
+    - _Requirements: 10.1, 10.2_
+
+- [ ] 7. Create game state manager
+  - [ ] 7.1 Implement GameStateManager module
+    - Manage current screen state (worldMap vs gameplay)
+    - Handle transitions between screens
+    - Initialize world map on game start
+    - Load level configuration when transitioning to gameplay
+    - Return to world map after level completion
+    - _Requirements: 1.1, 1.5, 10.4, 10.5_
+  - [ ] 7.2 Write unit tests for state transitions
+    - Test world map to gameplay transition
+    - Test gameplay to world map transition
+    - Test level initialization before display
+    - _Requirements: 1.5, 10.4_
+  - [ ] 7.3 Integrate GameStateManager with main game loop
+    - Update main loop to handle multiple screens
+    - Route input to active screen
+    - Route rendering to active screen
+    - _Requirements: 1.1_
+  - [ ] 7.4 Update game initialization to show world map first
+    - Initialize ProgressStorage and LevelProgressionManager
+    - Display world map on game start
+    - Position camera on first incomplete level
+    - _Requirements: 1.1, 9.2, 10.5_
+
+- [ ] 8. Integrate level generation with gameplay
+  - [ ] 8.1 Refactor current level data to use LevelGenerator
+    - Replace hardcoded platforms with generated platforms
+    - Replace hardcoded enemies with generated enemies
+    - Replace hardcoded collectibles with generated collectibles
+    - _Requirements: 3.1, 3.2_
+  - [ ] 8.2 Update enemy update logic to handle all enemy types
+    - Add update logic for GroundEnemy instances
+    - Add update logic for PlasmaShooter instances
+    - Add update logic for JumpingEnemy instances
+    - Add update logic for Projectile instances
+    - _Requirements: 4.2, 5.2, 6.2_
+  - [ ] 8.3 Update enemy rendering to handle all enemy types
+    - Add rendering for GroundEnemy
+    - Add rendering for PlasmaShooter
+    - Add rendering for JumpingEnemy
+    - Add rendering for Projectile
+    - _Requirements: 4.1, 5.1, 6.1_
+  - [ ] 8.4 Update collision detection for new enemy types
+    - Handle GroundEnemy collisions (defeat from above, damage from sides)
+    - Handle PlasmaShooter collisions (no direct collision, only projectiles)
+    - Handle JumpingEnemy collisions (defeat from above, damage from sides)
+    - Handle Projectile collisions (damage player, remove projectile)
+    - _Requirements: 4.3, 4.4, 5.4, 6.4, 6.5_
+
+- [ ] 9. Integrate background system with gameplay
+  - [ ] 9.1 Generate background when loading level
+    - Call BackgroundGenerator with level number
+    - Initialize ParallaxBackground with generated config
+    - _Requirements: 7.1, 7.3_
+  - [ ] 9.2 Render background in game loop
+    - Render ParallaxBackground before other game elements
+    - Pass camera position for parallax scrolling
+    - _Requirements: 7.4_
+  - [ ] 9.3 Write integration test for background rendering
+    - Test background renders with camera scrolling
+    - Test same level produces same background
+    - _Requirements: 7.1, 7.4_
+
+- [ ] 10. Integrate world map with level completion
+  - [ ] 10.1 Update level completion handler
+    - Mark level as completed in LevelProgressionManager
+    - Update best score if new score is higher
+    - Unlock next level
+    - Save progress to storage
+    - Trigger transition back to world map
+    - _Requirements: 1.3, 1.4, 2.3, 9.1_
+  - [ ] 10.2 Write property test for completion flow
+    - **Property 2: Level completion marks node**
+    - **Property 9: Completion status persistence across transitions**
+    - **Validates: Requirements 1.3, 2.5**
+  - [ ] 10.3 Update world map to reflect completion status
+    - Update node visual indicators after completion
+    - Position camera on newly unlocked level
+    - _Requirements: 1.3, 2.4, 10.5_
+
+- [ ] 11. Update UI for multi-level system
+  - [ ] 11.1 Add world map UI elements to HTML
+    - Add world map container
+    - Add level selection instructions
+    - Style world map elements
+    - _Requirements: 1.1, 1.2_
+  - [ ] 11.2 Update HUD to show current level number
+    - Display current level in HUD
+    - Update styling for level indicator
+    - _Requirements: 1.5_
+  - [ ] 11.3 Update game over/complete screens
+    - Add "Return to World Map" button
+    - Update restart behavior to return to world map
+    - _Requirements: 2.1, 10.2_
+
+- [ ] 12. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 13. Polish and final integration
+  - [ ] 13.1 Add visual polish to world map
+    - Add animations for node selection
+    - Add hover effects
+    - Add level preview information
+    - _Requirements: 8.1, 8.2_
+  - [ ] 13.2 Add visual polish to transitions
+    - Ensure smooth fade timing
+    - Add loading indicator during level generation
+    - _Requirements: 10.1, 10.2_
+  - [ ] 13.3 Optimize performance
+    - Implement enemy culling outside camera view
+    - Limit maximum projectiles per level
+    - Cache generated backgrounds
+    - _Requirements: 5.5_
+  - [ ] 13.4 Write integration tests for complete game flow
+    - Test start → world map → select level → play → complete → return to map
+    - Test level progression across multiple levels
+    - Test replay flow
+    - Test progress persistence after page refresh
+    - _Requirements: 1.1, 1.5, 2.1, 9.2_
+
+- [ ] 14. Final checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
