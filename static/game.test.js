@@ -213,6 +213,604 @@ describe('StorageManager', () => {
     });
 });
 
+// ProgressStorage implementation (copied from game.js for testing)
+const ProgressStorage = {
+    STORAGE_KEY: 'superKiroWorld_levelProgress',
+    VERSION: 1,
+    
+    saveProgress(data) {
+        try {
+            const progressData = {
+                version: this.VERSION,
+                completedLevels: Array.from(data.completedLevels || []),
+                levelScores: data.levelScores || {},
+                totalScore: data.totalScore || 0,
+                lastPlayedLevel: data.lastPlayedLevel || 1,
+                timestamp: new Date().toISOString()
+            };
+            
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(progressData));
+            return true;
+        } catch (error) {
+            if (error.name === 'QuotaExceededError') {
+                console.warn('Storage quota exceeded - progress not saved');
+            } else if (error.name === 'SecurityError') {
+                console.warn('Storage access denied (private browsing?) - progress not saved');
+            } else {
+                console.error('Error saving progress:', error);
+            }
+            return false;
+        }
+    },
+    
+    loadProgress() {
+        try {
+            const stored = localStorage.getItem(this.STORAGE_KEY);
+            
+            if (stored === null) {
+                return this.getDefaultProgress();
+            }
+            
+            const parsed = JSON.parse(stored);
+            
+            if (!this.validateProgress(parsed)) {
+                console.warn('Invalid progress data structure, resetting to default');
+                this.clearProgress();
+                return this.getDefaultProgress();
+            }
+            
+            if (parsed.version !== this.VERSION) {
+                console.log('Progress data version mismatch, migrating...');
+                const migrated = this.migrateProgress(parsed);
+                if (migrated) {
+                    this.saveProgress(migrated);
+                    return migrated;
+                } else {
+                    console.warn('Migration failed, resetting to default');
+                    this.clearProgress();
+                    return this.getDefaultProgress();
+                }
+            }
+            
+            return {
+                version: parsed.version,
+                completedLevels: new Set(parsed.completedLevels),
+                levelScores: parsed.levelScores,
+                totalScore: parsed.totalScore,
+                lastPlayedLevel: parsed.lastPlayedLevel,
+                timestamp: parsed.timestamp
+            };
+            
+        } catch (error) {
+            console.error('Error loading progress (corrupted data):', error);
+            this.clearProgress();
+            return this.getDefaultProgress();
+        }
+    },
+    
+    validateProgress(data) {
+        if (!data || typeof data !== 'object') return false;
+        if (typeof data.version !== 'number') return false;
+        if (!Array.isArray(data.completedLevels)) return false;
+        if (typeof data.levelScores !== 'object') return false;
+        if (typeof data.totalScore !== 'number') return false;
+        if (typeof data.lastPlayedLevel !== 'number') return false;
+        
+        for (const level of data.completedLevels) {
+            if (typeof level !== 'number' || level < 1) return false;
+        }
+        
+        for (const [level, score] of Object.entries(data.levelScores)) {
+            if (isNaN(parseInt(level)) || typeof score !== 'number' || score < 0) {
+                return false;
+            }
+        }
+        
+        return true;
+    },
+    
+    migrateProgress(oldData) {
+        if (oldData.version < 1) {
+            return null;
+        }
+        return oldData;
+    },
+    
+    getDefaultProgress() {
+        return {
+            version: this.VERSION,
+            completedLevels: new Set(),
+            levelScores: {},
+            totalScore: 0,
+            lastPlayedLevel: 1,
+            timestamp: new Date().toISOString()
+        };
+    },
+    
+    clearProgress() {
+        try {
+            localStorage.removeItem(this.STORAGE_KEY);
+        } catch (error) {
+            console.error('Error clearing progress:', error);
+        }
+    }
+};
+
+describe('ProgressStorage', () => {
+    let consoleErrorSpy;
+    let consoleWarnSpy;
+    let consoleLogSpy;
+
+    beforeEach(() => {
+        global.localStorage = new LocalStorageMock();
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        global.localStorage.clear();
+        consoleErrorSpy.mockRestore();
+        consoleWarnSpy.mockRestore();
+        consoleLogSpy.mockRestore();
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 36: Completion status persistence**
+     * For any level completion, the completion status should be saved to local storage
+     * and retrievable after saving
+     * **Validates: Requirements 9.1**
+     */
+    it('Property 36: Completion status persistence - save then load returns same data', () => {
+        fc.assert(
+            fc.property(
+                fc.array(fc.integer({ min: 1, max: 8 }), { minLength: 0, maxLength: 8 }), // completed levels
+                fc.record({
+                    1: fc.integer({ min: 0, max: 10000 }),
+                    2: fc.integer({ min: 0, max: 10000 }),
+                    3: fc.integer({ min: 0, max: 10000 }),
+                    4: fc.integer({ min: 0, max: 10000 }),
+                    5: fc.integer({ min: 0, max: 10000 }),
+                    6: fc.integer({ min: 0, max: 10000 }),
+                    7: fc.integer({ min: 0, max: 10000 }),
+                    8: fc.integer({ min: 0, max: 10000 })
+                }), // level scores
+                fc.integer({ min: 0, max: 80000 }), // total score
+                fc.integer({ min: 1, max: 8 }), // last played level
+                (completedLevels, levelScores, totalScore, lastPlayedLevel) => {
+                    ProgressStorage.clearProgress();
+                    
+                    // Create progress data
+                    const progressData = {
+                        completedLevels: new Set(completedLevels),
+                        levelScores: levelScores,
+                        totalScore: totalScore,
+                        lastPlayedLevel: lastPlayedLevel
+                    };
+                    
+                    // Save progress
+                    const saveResult = ProgressStorage.saveProgress(progressData);
+                    if (!saveResult) return false;
+                    
+                    // Load progress
+                    const loadedProgress = ProgressStorage.loadProgress();
+                    
+                    // Property: Loaded data should match saved data
+                    // Check completed levels (convert Set to sorted array for comparison)
+                    const savedLevels = Array.from(progressData.completedLevels).sort((a, b) => a - b);
+                    const loadedLevels = Array.from(loadedProgress.completedLevels).sort((a, b) => a - b);
+                    
+                    if (savedLevels.length !== loadedLevels.length) return false;
+                    for (let i = 0; i < savedLevels.length; i++) {
+                        if (savedLevels[i] !== loadedLevels[i]) return false;
+                    }
+                    
+                    // Check level scores
+                    for (const [level, score] of Object.entries(progressData.levelScores)) {
+                        if (loadedProgress.levelScores[level] !== score) return false;
+                    }
+                    
+                    // Check other fields
+                    if (loadedProgress.totalScore !== progressData.totalScore) return false;
+                    if (loadedProgress.lastPlayedLevel !== progressData.lastPlayedLevel) return false;
+                    if (loadedProgress.version !== ProgressStorage.VERSION) return false;
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit Tests
+
+    it('should return default progress when storage is empty', () => {
+        const progress = ProgressStorage.loadProgress();
+        
+        expect(progress.version).toBe(1);
+        expect(progress.completedLevels).toBeInstanceOf(Set);
+        expect(progress.completedLevels.size).toBe(0);
+        expect(progress.levelScores).toEqual({});
+        expect(progress.totalScore).toBe(0);
+        expect(progress.lastPlayedLevel).toBe(1);
+        expect(progress.timestamp).toBeDefined();
+    });
+
+    it('should save and load progress data correctly', () => {
+        const progressData = {
+            completedLevels: new Set([1, 2, 3]),
+            levelScores: { 1: 1000, 2: 1500, 3: 2000 },
+            totalScore: 4500,
+            lastPlayedLevel: 3
+        };
+
+        const saveResult = ProgressStorage.saveProgress(progressData);
+        expect(saveResult).toBe(true);
+
+        const loadedProgress = ProgressStorage.loadProgress();
+        
+        expect(loadedProgress.version).toBe(1);
+        expect(Array.from(loadedProgress.completedLevels).sort()).toEqual([1, 2, 3]);
+        expect(loadedProgress.levelScores).toEqual({ 1: 1000, 2: 1500, 3: 2000 });
+        expect(loadedProgress.totalScore).toBe(4500);
+        expect(loadedProgress.lastPlayedLevel).toBe(3);
+    });
+
+    it('should handle corrupted JSON data', () => {
+        localStorage.setItem(ProgressStorage.STORAGE_KEY, 'not valid json{');
+        
+        const progress = ProgressStorage.loadProgress();
+        
+        // Should return default progress
+        expect(progress.completedLevels.size).toBe(0);
+        expect(progress.totalScore).toBe(0);
+        
+        // Storage should be cleared
+        expect(localStorage.getItem(ProgressStorage.STORAGE_KEY)).toBeNull();
+    });
+
+    it('should handle invalid data structure', () => {
+        const invalidData = {
+            version: 1,
+            completedLevels: 'not an array', // Invalid
+            levelScores: {},
+            totalScore: 0,
+            lastPlayedLevel: 1
+        };
+        
+        localStorage.setItem(ProgressStorage.STORAGE_KEY, JSON.stringify(invalidData));
+        
+        const progress = ProgressStorage.loadProgress();
+        
+        // Should return default progress
+        expect(progress.completedLevels.size).toBe(0);
+        expect(progress.totalScore).toBe(0);
+    });
+
+    it('should validate completed levels are positive numbers', () => {
+        const invalidData = {
+            version: 1,
+            completedLevels: [1, 2, -1], // Negative level invalid
+            levelScores: {},
+            totalScore: 0,
+            lastPlayedLevel: 1
+        };
+        
+        localStorage.setItem(ProgressStorage.STORAGE_KEY, JSON.stringify(invalidData));
+        
+        const progress = ProgressStorage.loadProgress();
+        
+        // Should return default progress due to invalid level
+        expect(progress.completedLevels.size).toBe(0);
+    });
+
+    it('should validate level scores are non-negative', () => {
+        const invalidData = {
+            version: 1,
+            completedLevels: [1, 2],
+            levelScores: { 1: 1000, 2: -500 }, // Negative score invalid
+            totalScore: 0,
+            lastPlayedLevel: 1
+        };
+        
+        localStorage.setItem(ProgressStorage.STORAGE_KEY, JSON.stringify(invalidData));
+        
+        const progress = ProgressStorage.loadProgress();
+        
+        // Should return default progress due to invalid score
+        expect(progress.completedLevels.size).toBe(0);
+    });
+
+    it('should clear progress data', () => {
+        const progressData = {
+            completedLevels: new Set([1, 2]),
+            levelScores: { 1: 1000, 2: 1500 },
+            totalScore: 2500,
+            lastPlayedLevel: 2
+        };
+
+        ProgressStorage.saveProgress(progressData);
+        expect(localStorage.getItem(ProgressStorage.STORAGE_KEY)).not.toBeNull();
+
+        ProgressStorage.clearProgress();
+        expect(localStorage.getItem(ProgressStorage.STORAGE_KEY)).toBeNull();
+    });
+
+    it('should handle empty completed levels set', () => {
+        const progressData = {
+            completedLevels: new Set(),
+            levelScores: {},
+            totalScore: 0,
+            lastPlayedLevel: 1
+        };
+
+        ProgressStorage.saveProgress(progressData);
+        const loadedProgress = ProgressStorage.loadProgress();
+        
+        expect(loadedProgress.completedLevels.size).toBe(0);
+        expect(Object.keys(loadedProgress.levelScores).length).toBe(0);
+    });
+
+    it('should preserve timestamp on save', () => {
+        const progressData = {
+            completedLevels: new Set([1]),
+            levelScores: { 1: 1000 },
+            totalScore: 1000,
+            lastPlayedLevel: 1
+        };
+
+        ProgressStorage.saveProgress(progressData);
+        const loadedProgress = ProgressStorage.loadProgress();
+        
+        expect(loadedProgress.timestamp).toBeDefined();
+        expect(typeof loadedProgress.timestamp).toBe('string');
+        
+        // Should be a valid ISO date string
+        const date = new Date(loadedProgress.timestamp);
+        expect(date.toString()).not.toBe('Invalid Date');
+    });
+});
+
+// LevelProgressionManager implementation (copied from game.js for testing)
+const LevelProgressionManager = {
+    totalLevels: 8,
+    completedLevels: new Set(),
+    levelScores: {},
+    
+    init() {
+        const progress = ProgressStorage.loadProgress();
+        this.completedLevels = progress.completedLevels;
+        this.levelScores = progress.levelScores;
+    },
+    
+    completeLevel(levelNumber, score) {
+        this.completedLevels.add(levelNumber);
+        
+        if (!this.levelScores[levelNumber] || score > this.levelScores[levelNumber]) {
+            this.levelScores[levelNumber] = score;
+        }
+        
+        const totalScore = Object.values(this.levelScores).reduce((sum, s) => sum + s, 0);
+        
+        ProgressStorage.saveProgress({
+            completedLevels: this.completedLevels,
+            levelScores: this.levelScores,
+            totalScore: totalScore,
+            lastPlayedLevel: levelNumber
+        });
+    },
+    
+    isLevelUnlocked(levelNumber) {
+        if (levelNumber === 1) {
+            return true;
+        }
+        return this.completedLevels.has(levelNumber - 1);
+    },
+    
+    isLevelCompleted(levelNumber) {
+        return this.completedLevels.has(levelNumber);
+    },
+    
+    getBestScore(levelNumber) {
+        return this.levelScores[levelNumber] || 0;
+    },
+    
+    resetProgress() {
+        this.completedLevels.clear();
+        this.levelScores = {};
+        ProgressStorage.clearProgress();
+    }
+};
+
+describe('LevelProgressionManager', () => {
+    let consoleErrorSpy;
+    let consoleWarnSpy;
+
+    beforeEach(() => {
+        global.localStorage = new LocalStorageMock();
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        
+        // Reset manager state
+        LevelProgressionManager.completedLevels = new Set();
+        LevelProgressionManager.levelScores = {};
+        ProgressStorage.clearProgress();
+    });
+
+    afterEach(() => {
+        global.localStorage.clear();
+        consoleErrorSpy.mockRestore();
+        consoleWarnSpy.mockRestore();
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 3: Level completion unlocks next level**
+     * For any level completion (except the final level), the next sequential level should become unlocked
+     * **Validates: Requirements 1.4**
+     */
+    it('Property 3: Level completion unlocks next level', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 7 }), // Level to complete (not the last level)
+                fc.integer({ min: 0, max: 10000 }), // Score
+                (levelNumber, score) => {
+                    // Reset state
+                    LevelProgressionManager.completedLevels = new Set();
+                    LevelProgressionManager.levelScores = {};
+                    ProgressStorage.clearProgress();
+                    
+                    // Complete all levels up to and including the target level
+                    for (let i = 1; i <= levelNumber; i++) {
+                        LevelProgressionManager.completeLevel(i, score);
+                    }
+                    
+                    // Property: Next level should be unlocked
+                    const nextLevel = levelNumber + 1;
+                    return LevelProgressionManager.isLevelUnlocked(nextLevel);
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 7: Replay score update**
+     * For any replayed level completion, if the new score exceeds the previous best score,
+     * the stored best score should be updated
+     * **Validates: Requirements 2.3**
+     */
+    it('Property 7: Replay score update - best score updates only when higher', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 8 }), // Level number
+                fc.integer({ min: 0, max: 10000 }), // Initial score
+                fc.integer({ min: 0, max: 10000 }), // Replay score
+                (levelNumber, initialScore, replayScore) => {
+                    // Reset state
+                    LevelProgressionManager.completedLevels = new Set();
+                    LevelProgressionManager.levelScores = {};
+                    ProgressStorage.clearProgress();
+                    
+                    // Complete level with initial score
+                    LevelProgressionManager.completeLevel(levelNumber, initialScore);
+                    
+                    // Replay level with new score
+                    LevelProgressionManager.completeLevel(levelNumber, replayScore);
+                    
+                    // Property: Best score should be the maximum of the two scores
+                    const expectedBestScore = Math.max(initialScore, replayScore);
+                    const actualBestScore = LevelProgressionManager.getBestScore(levelNumber);
+                    
+                    return actualBestScore === expectedBestScore;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit Tests
+
+    it('should initialize with no completed levels', () => {
+        LevelProgressionManager.init();
+        
+        expect(LevelProgressionManager.completedLevels.size).toBe(0);
+        expect(Object.keys(LevelProgressionManager.levelScores).length).toBe(0);
+    });
+
+    it('should mark level as completed', () => {
+        LevelProgressionManager.completeLevel(1, 1000);
+        
+        expect(LevelProgressionManager.isLevelCompleted(1)).toBe(true);
+        expect(LevelProgressionManager.getBestScore(1)).toBe(1000);
+    });
+
+    it('should unlock next level after completion', () => {
+        expect(LevelProgressionManager.isLevelUnlocked(2)).toBe(false);
+        
+        LevelProgressionManager.completeLevel(1, 1000);
+        
+        expect(LevelProgressionManager.isLevelUnlocked(2)).toBe(true);
+    });
+
+    it('should always have level 1 unlocked', () => {
+        expect(LevelProgressionManager.isLevelUnlocked(1)).toBe(true);
+    });
+
+    it('should update best score when new score is higher', () => {
+        LevelProgressionManager.completeLevel(1, 1000);
+        expect(LevelProgressionManager.getBestScore(1)).toBe(1000);
+        
+        LevelProgressionManager.completeLevel(1, 1500);
+        expect(LevelProgressionManager.getBestScore(1)).toBe(1500);
+    });
+
+    it('should not update best score when new score is lower', () => {
+        LevelProgressionManager.completeLevel(1, 1500);
+        expect(LevelProgressionManager.getBestScore(1)).toBe(1500);
+        
+        LevelProgressionManager.completeLevel(1, 1000);
+        expect(LevelProgressionManager.getBestScore(1)).toBe(1500);
+    });
+
+    it('should persist progress to storage', () => {
+        LevelProgressionManager.completeLevel(1, 1000);
+        LevelProgressionManager.completeLevel(2, 1500);
+        
+        // Load from storage
+        const progress = ProgressStorage.loadProgress();
+        
+        expect(progress.completedLevels.has(1)).toBe(true);
+        expect(progress.completedLevels.has(2)).toBe(true);
+        expect(progress.levelScores[1]).toBe(1000);
+        expect(progress.levelScores[2]).toBe(1500);
+    });
+
+    it('should load progress from storage on init', () => {
+        // Save some progress
+        ProgressStorage.saveProgress({
+            completedLevels: new Set([1, 2, 3]),
+            levelScores: { 1: 1000, 2: 1500, 3: 2000 },
+            totalScore: 4500,
+            lastPlayedLevel: 3
+        });
+        
+        // Initialize manager
+        LevelProgressionManager.init();
+        
+        expect(LevelProgressionManager.isLevelCompleted(1)).toBe(true);
+        expect(LevelProgressionManager.isLevelCompleted(2)).toBe(true);
+        expect(LevelProgressionManager.isLevelCompleted(3)).toBe(true);
+        expect(LevelProgressionManager.getBestScore(1)).toBe(1000);
+        expect(LevelProgressionManager.getBestScore(2)).toBe(1500);
+        expect(LevelProgressionManager.getBestScore(3)).toBe(2000);
+    });
+
+    it('should reset all progress', () => {
+        LevelProgressionManager.completeLevel(1, 1000);
+        LevelProgressionManager.completeLevel(2, 1500);
+        
+        LevelProgressionManager.resetProgress();
+        
+        expect(LevelProgressionManager.completedLevels.size).toBe(0);
+        expect(Object.keys(LevelProgressionManager.levelScores).length).toBe(0);
+        
+        // Verify storage is cleared
+        const progress = ProgressStorage.loadProgress();
+        expect(progress.completedLevels.size).toBe(0);
+    });
+
+    it('should return 0 for best score of uncompleted level', () => {
+        expect(LevelProgressionManager.getBestScore(5)).toBe(0);
+    });
+
+    it('should not unlock level 3 if level 2 is not completed', () => {
+        LevelProgressionManager.completeLevel(1, 1000);
+        
+        expect(LevelProgressionManager.isLevelUnlocked(2)).toBe(true);
+        expect(LevelProgressionManager.isLevelUnlocked(3)).toBe(false);
+    });
+});
+
 // LeaderboardAPI implementation (copied from game.js for testing)
 const LeaderboardAPI = {
     BASE_URL: '/api/leaderboard',

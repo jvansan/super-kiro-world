@@ -64,6 +64,212 @@ const StorageManager = {
     }
 };
 
+// ProgressStorage - Handles level progression persistence
+const ProgressStorage = {
+    STORAGE_KEY: 'superKiroWorld_levelProgress',
+    VERSION: 1,
+    
+    // Save progress data to local storage
+    saveProgress(data) {
+        try {
+            const progressData = {
+                version: this.VERSION,
+                completedLevels: Array.from(data.completedLevels || []),
+                levelScores: data.levelScores || {},
+                totalScore: data.totalScore || 0,
+                lastPlayedLevel: data.lastPlayedLevel || 1,
+                timestamp: new Date().toISOString()
+            };
+            
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(progressData));
+            return true;
+        } catch (error) {
+            // Handle storage errors gracefully
+            if (error.name === 'QuotaExceededError') {
+                console.warn('Storage quota exceeded - progress not saved');
+            } else if (error.name === 'SecurityError') {
+                console.warn('Storage access denied (private browsing?) - progress not saved');
+            } else {
+                console.error('Error saving progress:', error);
+            }
+            return false;
+        }
+    },
+    
+    // Load progress data from local storage
+    loadProgress() {
+        try {
+            const stored = localStorage.getItem(this.STORAGE_KEY);
+            
+            // No saved data - return default state
+            if (stored === null) {
+                return this.getDefaultProgress();
+            }
+            
+            // Parse stored data
+            const parsed = JSON.parse(stored);
+            
+            // Validate data structure
+            if (!this.validateProgress(parsed)) {
+                console.warn('Invalid progress data structure, resetting to default');
+                this.clearProgress();
+                return this.getDefaultProgress();
+            }
+            
+            // Handle version mismatch
+            if (parsed.version !== this.VERSION) {
+                console.log('Progress data version mismatch, migrating...');
+                const migrated = this.migrateProgress(parsed);
+                if (migrated) {
+                    this.saveProgress(migrated);
+                    return migrated;
+                } else {
+                    console.warn('Migration failed, resetting to default');
+                    this.clearProgress();
+                    return this.getDefaultProgress();
+                }
+            }
+            
+            // Convert completedLevels array back to Set
+            return {
+                version: parsed.version,
+                completedLevels: new Set(parsed.completedLevels),
+                levelScores: parsed.levelScores,
+                totalScore: parsed.totalScore,
+                lastPlayedLevel: parsed.lastPlayedLevel,
+                timestamp: parsed.timestamp
+            };
+            
+        } catch (error) {
+            // Handle corrupted data
+            console.error('Error loading progress (corrupted data):', error);
+            this.clearProgress();
+            return this.getDefaultProgress();
+        }
+    },
+    
+    // Validate progress data structure
+    validateProgress(data) {
+        if (!data || typeof data !== 'object') return false;
+        if (typeof data.version !== 'number') return false;
+        if (!Array.isArray(data.completedLevels)) return false;
+        if (typeof data.levelScores !== 'object') return false;
+        if (typeof data.totalScore !== 'number') return false;
+        if (typeof data.lastPlayedLevel !== 'number') return false;
+        
+        // Validate that all completed levels are valid numbers
+        for (const level of data.completedLevels) {
+            if (typeof level !== 'number' || level < 1) return false;
+        }
+        
+        // Validate that all level scores are valid
+        for (const [level, score] of Object.entries(data.levelScores)) {
+            if (isNaN(parseInt(level)) || typeof score !== 'number' || score < 0) {
+                return false;
+            }
+        }
+        
+        return true;
+    },
+    
+    // Migrate progress data from older versions
+    migrateProgress(oldData) {
+        // Currently only version 1 exists, but this allows for future migrations
+        if (oldData.version < 1) {
+            // Migrate from pre-version format (if it existed)
+            return null;
+        }
+        
+        // No migration needed for version 1
+        return oldData;
+    },
+    
+    // Get default progress state
+    getDefaultProgress() {
+        return {
+            version: this.VERSION,
+            completedLevels: new Set(),
+            levelScores: {},
+            totalScore: 0,
+            lastPlayedLevel: 1,
+            timestamp: new Date().toISOString()
+        };
+    },
+    
+    // Clear progress data
+    clearProgress() {
+        try {
+            localStorage.removeItem(this.STORAGE_KEY);
+        } catch (error) {
+            console.error('Error clearing progress:', error);
+        }
+    }
+};
+
+// LevelProgressionManager - Tracks level completion and unlocking
+const LevelProgressionManager = {
+    totalLevels: 8,
+    completedLevels: new Set(),
+    levelScores: {},
+    
+    // Initialize from storage
+    init() {
+        const progress = ProgressStorage.loadProgress();
+        this.completedLevels = progress.completedLevels;
+        this.levelScores = progress.levelScores;
+    },
+    
+    // Mark level as completed
+    completeLevel(levelNumber, score) {
+        // Add to completed set
+        this.completedLevels.add(levelNumber);
+        
+        // Update best score if higher
+        if (!this.levelScores[levelNumber] || score > this.levelScores[levelNumber]) {
+            this.levelScores[levelNumber] = score;
+        }
+        
+        // Calculate total score
+        const totalScore = Object.values(this.levelScores).reduce((sum, s) => sum + s, 0);
+        
+        // Save to storage
+        ProgressStorage.saveProgress({
+            completedLevels: this.completedLevels,
+            levelScores: this.levelScores,
+            totalScore: totalScore,
+            lastPlayedLevel: levelNumber
+        });
+    },
+    
+    // Check if level is unlocked
+    isLevelUnlocked(levelNumber) {
+        // Level 1 always unlocked
+        if (levelNumber === 1) {
+            return true;
+        }
+        
+        // Other levels unlocked if previous level completed
+        return this.completedLevels.has(levelNumber - 1);
+    },
+    
+    // Check if level is completed
+    isLevelCompleted(levelNumber) {
+        return this.completedLevels.has(levelNumber);
+    },
+    
+    // Get best score for level
+    getBestScore(levelNumber) {
+        return this.levelScores[levelNumber] || 0;
+    },
+    
+    // Reset all progress
+    resetProgress() {
+        this.completedLevels.clear();
+        this.levelScores = {};
+        ProgressStorage.clearProgress();
+    }
+};
+
 // LeaderboardAPI - Handles communication with backend API
 const LeaderboardAPI = {
     BASE_URL: '/api/leaderboard',
