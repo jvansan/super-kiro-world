@@ -123,30 +123,30 @@
     - **Property 29: Parallax scrolling behavior**
     - **Validates: Requirements 7.4**
 
-- [ ] 5. Create world map system
-  - [ ] 5.1 Implement WorldMap module
+- [x] 5. Create world map system
+  - [x] 5.1 Implement WorldMap module
     - Create level node data structure with positions
     - Implement node rendering with status indicators (locked/unlocked/completed)
     - Implement keyboard navigation between nodes
     - Implement camera positioning on selected node
     - Draw paths connecting sequential nodes
     - _Requirements: 1.1, 1.2, 2.4, 8.1, 8.2, 8.3, 8.4, 8.5_
-  - [ ] 5.2 Write property test for node status display
+  - [x] 5.2 Write property test for node status display
     - **Property 1: All level nodes displayed with status**
     - **Property 8: Completed level visual distinction**
     - **Validates: Requirements 1.2, 2.4**
-  - [ ] 5.3 Write unit tests for world map navigation
+  - [x] 5.3 Write unit tests for world map navigation
     - Test arrow key node selection
     - Test camera positioning
     - Test locked level prevention
     - _Requirements: 1.5, 8.3_
-  - [ ] 5.4 Implement world map visual indicators
+  - [x] 5.4 Implement world map visual indicators
     - Create locked level indicator (lock icon)
     - Create unlocked level indicator (open circle)
     - Create completed level indicator (checkmark)
     - Highlight current player position
     - _Requirements: 8.3, 8.4, 8.5, 8.1_
-  - [ ] 5.5 Write property test for visual indicators
+  - [x] 5.5 Write property test for visual indicators
     - **Property 33: Locked level indicator**
     - **Property 34: Available level indicator**
     - **Property 35: Completed level indicator**

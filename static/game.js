@@ -1131,6 +1131,314 @@ class JumpingEnemy {
     }
 }
 
+// WorldMap - Manages world map rendering and player interaction
+const WorldMap = {
+    nodes: [],              // Array of level nodes
+    selectedNode: 0,        // Currently selected node index
+    cameraX: 0,            // Camera position for map scrolling
+    cameraY: 0,
+    totalLevels: 8,        // Total number of levels
+    
+    // Initialize world map
+    init() {
+        // Create level nodes with positions
+        this.nodes = [];
+        
+        // Layout nodes in a path pattern (similar to Super Mario World)
+        // Nodes will be positioned in a winding path across the screen
+        const nodePositions = [
+            { x: 100, y: 400 },   // Level 1
+            { x: 250, y: 350 },   // Level 2
+            { x: 400, y: 300 },   // Level 3
+            { x: 550, y: 350 },   // Level 4
+            { x: 700, y: 400 },   // Level 5
+            { x: 850, y: 350 },   // Level 6
+            { x: 1000, y: 300 },  // Level 7
+            { x: 1150, y: 350 }   // Level 8
+        ];
+        
+        for (let i = 0; i < this.totalLevels; i++) {
+            const levelNumber = i + 1;
+            const pos = nodePositions[i];
+            
+            this.nodes.push({
+                levelNumber: levelNumber,
+                x: pos.x,
+                y: pos.y,
+                unlocked: LevelProgressionManager.isLevelUnlocked(levelNumber),
+                completed: LevelProgressionManager.isLevelCompleted(levelNumber),
+                bestScore: LevelProgressionManager.getBestScore(levelNumber)
+            });
+        }
+        
+        // Position camera on first incomplete level
+        this.selectedNode = this.findFirstIncompleteLevel();
+        this.updateCamera();
+    },
+    
+    // Find first incomplete level (or last level if all complete)
+    findFirstIncompleteLevel() {
+        for (let i = 0; i < this.nodes.length; i++) {
+            if (!this.nodes[i].completed && this.nodes[i].unlocked) {
+                return i;
+            }
+        }
+        // All levels complete - return last level
+        return this.nodes.length - 1;
+    },
+    
+    // Update world map state
+    update(keys) {
+        // Handle node selection with arrow keys
+        const leftPressed = keys['ArrowLeft'] || keys['a'];
+        const rightPressed = keys['ArrowRight'] || keys['d'];
+        const upPressed = keys['ArrowUp'] || keys['w'];
+        const downPressed = keys['ArrowDown'] || keys['s'];
+        const enterPressed = keys['Enter'] || keys[' '];
+        
+        // Initialize last key states if not set
+        if (this.lastLeftPressed === undefined) this.lastLeftPressed = false;
+        if (this.lastRightPressed === undefined) this.lastRightPressed = false;
+        if (this.lastEnterPressed === undefined) this.lastEnterPressed = false;
+        
+        // Prevent rapid key repeats by checking if key was just pressed
+        if (leftPressed && !this.lastLeftPressed) {
+            this.moveSelection(-1);
+        }
+        if (rightPressed && !this.lastRightPressed) {
+            this.moveSelection(1);
+        }
+        
+        // Handle level start
+        if (enterPressed && !this.lastEnterPressed) {
+            this.selectLevel();
+        }
+        
+        // Store key states for next frame
+        this.lastLeftPressed = leftPressed;
+        this.lastRightPressed = rightPressed;
+        this.lastEnterPressed = enterPressed;
+        
+        // Update camera position
+        this.updateCamera();
+    },
+    
+    // Move selection to adjacent node
+    moveSelection(direction) {
+        const newIndex = this.selectedNode + direction;
+        
+        // Clamp to valid range
+        if (newIndex >= 0 && newIndex < this.nodes.length) {
+            this.selectedNode = newIndex;
+        }
+    },
+    
+    // Select current level and start gameplay
+    selectLevel() {
+        const node = this.nodes[this.selectedNode];
+        
+        // Check if level is unlocked
+        if (!node.unlocked) {
+            // Show locked message (could add visual feedback)
+            console.log('Level is locked!');
+            return;
+        }
+        
+        // Trigger transition to gameplay
+        // This will be handled by GameStateManager in a later task
+        console.log(`Starting level ${node.levelNumber}`);
+    },
+    
+    // Update camera position to follow selected node
+    updateCamera() {
+        const node = this.nodes[this.selectedNode];
+        
+        // Center camera on selected node
+        this.cameraX = node.x - canvas.width / 2;
+        this.cameraY = node.y - canvas.height / 2;
+        
+        // Clamp camera to map bounds
+        this.cameraX = Math.max(0, this.cameraX);
+        this.cameraY = Math.max(0, this.cameraY);
+    },
+    
+    // Render world map
+    render(ctx) {
+        // Clear canvas with sky blue background
+        ctx.fillStyle = '#87CEEB';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw paths connecting sequential nodes
+        this.drawPaths(ctx);
+        
+        // Draw level nodes with status indicators
+        this.drawNodes(ctx);
+        
+        // Draw UI (instructions, level info)
+        this.drawUI(ctx);
+    },
+    
+    // Draw paths connecting sequential nodes
+    drawPaths(ctx) {
+        ctx.strokeStyle = '#8B4513'; // Brown path color
+        ctx.lineWidth = 8;
+        ctx.lineCap = 'round';
+        
+        for (let i = 0; i < this.nodes.length - 1; i++) {
+            const node1 = this.nodes[i];
+            const node2 = this.nodes[i + 1];
+            
+            // Calculate screen positions
+            const x1 = node1.x - this.cameraX;
+            const y1 = node1.y - this.cameraY;
+            const x2 = node2.x - this.cameraX;
+            const y2 = node2.y - this.cameraY;
+            
+            // Draw path line
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+    },
+    
+    // Draw level nodes with status indicators
+    drawNodes(ctx) {
+        for (let i = 0; i < this.nodes.length; i++) {
+            const node = this.nodes[i];
+            const isSelected = i === this.selectedNode;
+            
+            // Calculate screen position
+            const screenX = node.x - this.cameraX;
+            const screenY = node.y - this.cameraY;
+            
+            // Draw node based on status
+            this.drawNode(ctx, node, screenX, screenY, isSelected);
+        }
+    },
+    
+    // Draw a single node with appropriate indicator
+    drawNode(ctx, node, x, y, isSelected) {
+        const nodeRadius = 30;
+        
+        // Draw selection highlight
+        if (isSelected) {
+            ctx.strokeStyle = '#FFD700'; // Gold highlight
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(x, y, nodeRadius + 8, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        
+        // Draw node circle
+        if (node.completed) {
+            // Completed level - green with checkmark
+            ctx.fillStyle = '#00FF00';
+            ctx.strokeStyle = '#008000';
+        } else if (node.unlocked) {
+            // Unlocked level - white/open
+            ctx.fillStyle = '#FFFFFF';
+            ctx.strokeStyle = '#000000';
+        } else {
+            // Locked level - gray with lock
+            ctx.fillStyle = '#808080';
+            ctx.strokeStyle = '#404040';
+        }
+        
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, nodeRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw status indicator
+        if (node.completed) {
+            // Draw checkmark
+            ctx.strokeStyle = '#008000';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(x - 10, y);
+            ctx.lineTo(x - 3, y + 10);
+            ctx.lineTo(x + 12, y - 10);
+            ctx.stroke();
+        } else if (!node.unlocked) {
+            // Draw lock icon
+            ctx.fillStyle = '#404040';
+            // Lock body
+            ctx.fillRect(x - 8, y + 2, 16, 12);
+            // Lock shackle
+            ctx.strokeStyle = '#404040';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(x, y - 3, 6, Math.PI, 0, true);
+            ctx.stroke();
+        }
+        
+        // Draw level number
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        if (node.unlocked && !node.completed) {
+            // Show level number for unlocked levels
+            ctx.fillText(node.levelNumber.toString(), x, y);
+        }
+    },
+    
+    // Draw UI elements (instructions, level info)
+    drawUI(ctx) {
+        // Draw title
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 32px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Super Kiro World', canvas.width / 2, 40);
+        
+        // Draw instructions
+        ctx.font = '18px Arial';
+        ctx.fillText('Use Arrow Keys to Navigate | Press Enter to Start Level', canvas.width / 2, 80);
+        
+        // Draw selected level info
+        const selectedNode = this.nodes[this.selectedNode];
+        ctx.font = 'bold 24px Arial';
+        ctx.fillText(`Level ${selectedNode.levelNumber}`, canvas.width / 2, canvas.height - 80);
+        
+        // Draw level status
+        ctx.font = '18px Arial';
+        if (selectedNode.completed) {
+            ctx.fillText(`Best Score: ${selectedNode.bestScore}`, canvas.width / 2, canvas.height - 50);
+        } else if (selectedNode.unlocked) {
+            ctx.fillText('Ready to Play!', canvas.width / 2, canvas.height - 50);
+        } else {
+            ctx.fillText('Locked - Complete Previous Level', canvas.width / 2, canvas.height - 50);
+        }
+    },
+    
+    // Get node at index
+    getNode(index) {
+        if (index >= 0 && index < this.nodes.length) {
+            return this.nodes[index];
+        }
+        return null;
+    },
+    
+    // Check if node is unlocked
+    isNodeUnlocked(index) {
+        const node = this.getNode(index);
+        return node ? node.unlocked : false;
+    },
+    
+    // Refresh node status from LevelProgressionManager
+    refreshNodeStatus() {
+        for (let i = 0; i < this.nodes.length; i++) {
+            const node = this.nodes[i];
+            node.unlocked = LevelProgressionManager.isLevelUnlocked(node.levelNumber);
+            node.completed = LevelProgressionManager.isLevelCompleted(node.levelNumber);
+            node.bestScore = LevelProgressionManager.getBestScore(node.levelNumber);
+        }
+    }
+};
+
 // LeaderboardAPI - Handles communication with backend API
 const LeaderboardAPI = {
     BASE_URL: '/api/leaderboard',

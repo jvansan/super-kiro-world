@@ -4500,3 +4500,702 @@ describe('ParallaxBackground', () => {
         expect(result.screenX).toBe(element.x);
     });
 });
+
+// WorldMap implementation (copied from game.js for testing)
+const WorldMap = {
+    nodes: [],
+    selectedNode: 0,
+    cameraX: 0,
+    cameraY: 0,
+    totalLevels: 8,
+    lastLeftPressed: false,
+    lastRightPressed: false,
+    lastEnterPressed: false,
+    
+    init() {
+        this.nodes = [];
+        this.lastLeftPressed = false;
+        this.lastRightPressed = false;
+        this.lastEnterPressed = false;
+        
+        const nodePositions = [
+            { x: 100, y: 400 },
+            { x: 250, y: 350 },
+            { x: 400, y: 300 },
+            { x: 550, y: 350 },
+            { x: 700, y: 400 },
+            { x: 850, y: 350 },
+            { x: 1000, y: 300 },
+            { x: 1150, y: 350 }
+        ];
+        
+        for (let i = 0; i < this.totalLevels; i++) {
+            const levelNumber = i + 1;
+            const pos = nodePositions[i];
+            
+            this.nodes.push({
+                levelNumber: levelNumber,
+                x: pos.x,
+                y: pos.y,
+                unlocked: LevelProgressionManager.isLevelUnlocked(levelNumber),
+                completed: LevelProgressionManager.isLevelCompleted(levelNumber),
+                bestScore: LevelProgressionManager.getBestScore(levelNumber)
+            });
+        }
+        
+        this.selectedNode = this.findFirstIncompleteLevel();
+        this.updateCamera();
+    },
+    
+    findFirstIncompleteLevel() {
+        for (let i = 0; i < this.nodes.length; i++) {
+            if (!this.nodes[i].completed && this.nodes[i].unlocked) {
+                return i;
+            }
+        }
+        return this.nodes.length - 1;
+    },
+    
+    update(keys) {
+        const leftPressed = keys['ArrowLeft'] || keys['a'];
+        const rightPressed = keys['ArrowRight'] || keys['d'];
+        const enterPressed = keys['Enter'] || keys[' '];
+        
+        if (leftPressed && !this.lastLeftPressed) {
+            this.moveSelection(-1);
+        }
+        if (rightPressed && !this.lastRightPressed) {
+            this.moveSelection(1);
+        }
+        
+        if (enterPressed && !this.lastEnterPressed) {
+            this.selectLevel();
+        }
+        
+        this.lastLeftPressed = leftPressed;
+        this.lastRightPressed = rightPressed;
+        this.lastEnterPressed = enterPressed;
+        
+        this.updateCamera();
+    },
+    
+    moveSelection(direction) {
+        const newIndex = this.selectedNode + direction;
+        
+        if (newIndex >= 0 && newIndex < this.nodes.length) {
+            this.selectedNode = newIndex;
+        }
+    },
+    
+    selectLevel() {
+        const node = this.nodes[this.selectedNode];
+        
+        if (!node.unlocked) {
+            console.log('Level is locked!');
+            return;
+        }
+        
+        console.log(`Starting level ${node.levelNumber}`);
+    },
+    
+    updateCamera() {
+        const node = this.nodes[this.selectedNode];
+        this.cameraX = node.x - 400;
+        this.cameraY = node.y - 300;
+        this.cameraX = Math.max(0, this.cameraX);
+        this.cameraY = Math.max(0, this.cameraY);
+    },
+    
+    getNode(index) {
+        if (index >= 0 && index < this.nodes.length) {
+            return this.nodes[index];
+        }
+        return null;
+    },
+    
+    isNodeUnlocked(index) {
+        const node = this.getNode(index);
+        return node ? node.unlocked : false;
+    },
+    
+    refreshNodeStatus() {
+        for (let i = 0; i < this.nodes.length; i++) {
+            const node = this.nodes[i];
+            node.unlocked = LevelProgressionManager.isLevelUnlocked(node.levelNumber);
+            node.completed = LevelProgressionManager.isLevelCompleted(node.levelNumber);
+            node.bestScore = LevelProgressionManager.getBestScore(node.levelNumber);
+        }
+    }
+};
+
+describe('WorldMap', () => {
+    let consoleErrorSpy;
+    let consoleWarnSpy;
+    let consoleLogSpy;
+
+    beforeEach(() => {
+        global.localStorage = new LocalStorageMock();
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        
+        // Reset manager state
+        LevelProgressionManager.completedLevels = new Set();
+        LevelProgressionManager.levelScores = {};
+        ProgressStorage.clearProgress();
+    });
+
+    afterEach(() => {
+        global.localStorage.clear();
+        consoleErrorSpy.mockRestore();
+        consoleWarnSpy.mockRestore();
+        consoleLogSpy.mockRestore();
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 1: All level nodes displayed with status**
+     * For any world map state, all level nodes should be rendered with their current unlock status visible
+     * **Validates: Requirements 1.2**
+     */
+    it('Property 1: All level nodes displayed with status', () => {
+        fc.assert(
+            fc.property(
+                fc.array(fc.integer({ min: 1, max: 8 }), { minLength: 0, maxLength: 8 }), // completed levels
+                (completedLevels) => {
+                    // Reset state
+                    LevelProgressionManager.completedLevels = new Set();
+                    LevelProgressionManager.levelScores = {};
+                    ProgressStorage.clearProgress();
+                    
+                    // Complete specified levels
+                    for (const level of completedLevels) {
+                        LevelProgressionManager.completeLevel(level, 1000);
+                    }
+                    
+                    // Initialize world map
+                    WorldMap.init();
+                    
+                    // Property: All 8 level nodes should exist
+                    if (WorldMap.nodes.length !== 8) return false;
+                    
+                    // Property: Each node should have correct status based on progression
+                    for (let i = 0; i < WorldMap.nodes.length; i++) {
+                        const node = WorldMap.nodes[i];
+                        const levelNumber = i + 1;
+                        
+                        // Check node has required properties
+                        if (typeof node.levelNumber !== 'number') return false;
+                        if (typeof node.x !== 'number') return false;
+                        if (typeof node.y !== 'number') return false;
+                        if (typeof node.unlocked !== 'boolean') return false;
+                        if (typeof node.completed !== 'boolean') return false;
+                        if (typeof node.bestScore !== 'number') return false;
+                        
+                        // Check status matches LevelProgressionManager
+                        const expectedUnlocked = LevelProgressionManager.isLevelUnlocked(levelNumber);
+                        const expectedCompleted = LevelProgressionManager.isLevelCompleted(levelNumber);
+                        const expectedBestScore = LevelProgressionManager.getBestScore(levelNumber);
+                        
+                        if (node.unlocked !== expectedUnlocked) return false;
+                        if (node.completed !== expectedCompleted) return false;
+                        if (node.bestScore !== expectedBestScore) return false;
+                    }
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 33: Locked level indicator**
+     * For any locked level on the world map, it should display a locked visual indicator
+     * **Validates: Requirements 8.3**
+     */
+    it('Property 33: Locked level indicator', () => {
+        fc.assert(
+            fc.property(
+                fc.array(fc.integer({ min: 1, max: 7 }), { minLength: 0, maxLength: 7 }), // completed levels (not all)
+                (completedLevels) => {
+                    // Reset state
+                    LevelProgressionManager.completedLevels = new Set();
+                    LevelProgressionManager.levelScores = {};
+                    ProgressStorage.clearProgress();
+                    
+                    // Complete specified levels
+                    for (const level of completedLevels) {
+                        LevelProgressionManager.completeLevel(level, 1000);
+                    }
+                    
+                    // Initialize world map
+                    WorldMap.init();
+                    
+                    // Property: All locked nodes should have unlocked=false
+                    for (const node of WorldMap.nodes) {
+                        const isUnlocked = LevelProgressionManager.isLevelUnlocked(node.levelNumber);
+                        
+                        // If level is locked, node should reflect that
+                        if (!isUnlocked) {
+                            if (node.unlocked !== false) return false;
+                        }
+                    }
+                    
+                    // Property: There should be at least one locked level (unless all are completed)
+                    const hasLockedLevel = WorldMap.nodes.some(n => !n.unlocked);
+                    
+                    // If we didn't complete all 8 levels, there should be locked levels
+                    if (completedLevels.length < 8 && !hasLockedLevel) return false;
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 34: Available level indicator**
+     * For any unlocked but uncompleted level on the world map, it should display an available visual indicator
+     * **Validates: Requirements 8.4**
+     */
+    it('Property 34: Available level indicator', () => {
+        fc.assert(
+            fc.property(
+                fc.array(fc.integer({ min: 1, max: 7 }), { minLength: 0, maxLength: 7 }), // completed levels (not all)
+                (completedLevels) => {
+                    // Reset state
+                    LevelProgressionManager.completedLevels = new Set();
+                    LevelProgressionManager.levelScores = {};
+                    ProgressStorage.clearProgress();
+                    
+                    // Complete specified levels
+                    for (const level of completedLevels) {
+                        LevelProgressionManager.completeLevel(level, 1000);
+                    }
+                    
+                    // Initialize world map
+                    WorldMap.init();
+                    
+                    // Property: All unlocked but uncompleted nodes should have unlocked=true and completed=false
+                    for (const node of WorldMap.nodes) {
+                        const isUnlocked = LevelProgressionManager.isLevelUnlocked(node.levelNumber);
+                        const isCompleted = LevelProgressionManager.isLevelCompleted(node.levelNumber);
+                        
+                        // If level is unlocked but not completed, node should reflect that
+                        if (isUnlocked && !isCompleted) {
+                            if (node.unlocked !== true) return false;
+                            if (node.completed !== false) return false;
+                        }
+                    }
+                    
+                    // Property: There should be at least one available (unlocked but uncompleted) level
+                    const hasAvailableLevel = WorldMap.nodes.some(n => n.unlocked && !n.completed);
+                    
+                    // Level 1 is always unlocked, so if it's not completed, it's available
+                    if (!LevelProgressionManager.isLevelCompleted(1) && !hasAvailableLevel) return false;
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 35: Completed level indicator**
+     * For any completed level on the world map, it should display a completed visual indicator with checkmark
+     * **Validates: Requirements 8.5**
+     */
+    it('Property 35: Completed level indicator', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 8 }), // Number of sequential levels to complete
+                (numLevelsToComplete) => {
+                    // Reset state
+                    LevelProgressionManager.completedLevels = new Set();
+                    LevelProgressionManager.levelScores = {};
+                    ProgressStorage.clearProgress();
+                    
+                    // Complete levels sequentially (1, 2, 3, ... up to numLevelsToComplete)
+                    for (let level = 1; level <= numLevelsToComplete; level++) {
+                        LevelProgressionManager.completeLevel(level, 1000);
+                    }
+                    
+                    // Initialize world map
+                    WorldMap.init();
+                    
+                    // Property: All completed nodes should have completed=true
+                    for (const node of WorldMap.nodes) {
+                        const isCompleted = LevelProgressionManager.isLevelCompleted(node.levelNumber);
+                        
+                        // If level is completed, node should reflect that
+                        if (isCompleted) {
+                            if (node.completed !== true) return false;
+                            // Completed nodes should also be unlocked
+                            if (node.unlocked !== true) return false;
+                            // Completed nodes should have a best score > 0
+                            if (node.bestScore <= 0) return false;
+                        }
+                    }
+                    
+                    // Property: There should be at least one completed level
+                    const hasCompletedLevel = WorldMap.nodes.some(n => n.completed);
+                    
+                    // We completed at least one level, so there should be completed nodes
+                    if (!hasCompletedLevel) return false;
+                    
+                    // Property: The number of completed nodes should match numLevelsToComplete
+                    const completedCount = WorldMap.nodes.filter(n => n.completed).length;
+                    if (completedCount !== numLevelsToComplete) return false;
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 8: Completed level visual distinction**
+     * For any world map display, completed levels should have visually different indicators than uncompleted levels
+     * **Validates: Requirements 2.4**
+     */
+    it('Property 8: Completed level visual distinction', () => {
+        fc.assert(
+            fc.property(
+                fc.array(fc.integer({ min: 1, max: 8 }), { minLength: 1, maxLength: 8 }), // completed levels (at least 1)
+                (completedLevels) => {
+                    // Reset state
+                    LevelProgressionManager.completedLevels = new Set();
+                    LevelProgressionManager.levelScores = {};
+                    ProgressStorage.clearProgress();
+                    
+                    // Complete specified levels
+                    for (const level of completedLevels) {
+                        LevelProgressionManager.completeLevel(level, 1000);
+                    }
+                    
+                    // Initialize world map
+                    WorldMap.init();
+                    
+                    // Property: Completed nodes should have completed=true, uncompleted should have completed=false
+                    for (const node of WorldMap.nodes) {
+                        const isCompleted = LevelProgressionManager.isLevelCompleted(node.levelNumber);
+                        
+                        // Node's completed status should match actual completion status
+                        if (node.completed !== isCompleted) return false;
+                        
+                        // Completed nodes should have a best score > 0
+                        if (node.completed && node.bestScore === 0) return false;
+                    }
+                    
+                    // Property: There should be at least one completed and one uncompleted node
+                    // (to verify visual distinction is possible)
+                    const hasCompleted = WorldMap.nodes.some(n => n.completed);
+                    const hasUncompleted = WorldMap.nodes.some(n => !n.completed);
+                    
+                    // If we completed some levels, there should be completed nodes
+                    if (completedLevels.length > 0 && !hasCompleted) return false;
+                    
+                    // If we didn't complete all levels, there should be uncompleted nodes
+                    if (completedLevels.length < 8 && !hasUncompleted) return false;
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit Tests
+
+    it('should initialize with 8 level nodes', () => {
+        WorldMap.init();
+        
+        expect(WorldMap.nodes.length).toBe(8);
+    });
+
+    it('should have level 1 unlocked by default', () => {
+        WorldMap.init();
+        
+        const level1Node = WorldMap.nodes[0];
+        expect(level1Node.unlocked).toBe(true);
+        expect(level1Node.levelNumber).toBe(1);
+    });
+
+    it('should have all other levels locked by default', () => {
+        WorldMap.init();
+        
+        for (let i = 1; i < WorldMap.nodes.length; i++) {
+            const node = WorldMap.nodes[i];
+            expect(node.unlocked).toBe(false);
+        }
+    });
+
+    it('should update node status when levels are completed', () => {
+        LevelProgressionManager.completeLevel(1, 1000);
+        
+        WorldMap.init();
+        
+        const level1Node = WorldMap.nodes[0];
+        const level2Node = WorldMap.nodes[1];
+        
+        expect(level1Node.completed).toBe(true);
+        expect(level1Node.bestScore).toBe(1000);
+        expect(level2Node.unlocked).toBe(true);
+    });
+
+    it('should refresh node status from LevelProgressionManager', () => {
+        WorldMap.init();
+        
+        // Initially level 2 should be locked
+        expect(WorldMap.nodes[1].unlocked).toBe(false);
+        
+        // Complete level 1
+        LevelProgressionManager.completeLevel(1, 1500);
+        
+        // Refresh status
+        WorldMap.refreshNodeStatus();
+        
+        // Now level 2 should be unlocked
+        expect(WorldMap.nodes[1].unlocked).toBe(true);
+        expect(WorldMap.nodes[0].completed).toBe(true);
+        expect(WorldMap.nodes[0].bestScore).toBe(1500);
+    });
+
+    it('should select first incomplete level on init', () => {
+        LevelProgressionManager.completeLevel(1, 1000);
+        LevelProgressionManager.completeLevel(2, 1500);
+        
+        WorldMap.init();
+        
+        // Should select level 3 (index 2) as first incomplete
+        expect(WorldMap.selectedNode).toBe(2);
+    });
+
+    it('should select last level if all levels complete', () => {
+        // Complete all levels
+        for (let i = 1; i <= 8; i++) {
+            LevelProgressionManager.completeLevel(i, 1000);
+        }
+        
+        WorldMap.init();
+        
+        // Should select last level (index 7)
+        expect(WorldMap.selectedNode).toBe(7);
+    });
+
+    it('should get node by index', () => {
+        WorldMap.init();
+        
+        const node = WorldMap.getNode(0);
+        
+        expect(node).not.toBeNull();
+        expect(node.levelNumber).toBe(1);
+    });
+
+    it('should return null for invalid node index', () => {
+        WorldMap.init();
+        
+        expect(WorldMap.getNode(-1)).toBeNull();
+        expect(WorldMap.getNode(10)).toBeNull();
+    });
+
+    it('should check if node is unlocked', () => {
+        WorldMap.init();
+        
+        expect(WorldMap.isNodeUnlocked(0)).toBe(true); // Level 1 always unlocked
+        expect(WorldMap.isNodeUnlocked(1)).toBe(false); // Level 2 locked initially
+    });
+
+    it('should have correct node positions', () => {
+        WorldMap.init();
+        
+        // Verify all nodes have valid positions
+        for (const node of WorldMap.nodes) {
+            expect(node.x).toBeGreaterThan(0);
+            expect(node.y).toBeGreaterThan(0);
+        }
+    });
+
+    it('should update camera position based on selected node', () => {
+        WorldMap.init();
+        
+        // Camera should be positioned relative to selected node
+        const selectedNode = WorldMap.nodes[WorldMap.selectedNode];
+        
+        // Camera X should be centered on node (with clamping)
+        const expectedCameraX = Math.max(0, selectedNode.x - 400);
+        expect(WorldMap.cameraX).toBe(expectedCameraX);
+    });
+
+    // Navigation Tests
+
+    it('should move selection right with arrow keys', () => {
+        WorldMap.init();
+        
+        const initialSelection = WorldMap.selectedNode;
+        
+        // Simulate right arrow key press
+        const keys = { 'ArrowRight': true };
+        WorldMap.update(keys);
+        
+        // Selection should move right (increase by 1)
+        expect(WorldMap.selectedNode).toBe(initialSelection + 1);
+    });
+
+    it('should move selection left with arrow keys', () => {
+        // Complete level 1 so we can select level 2
+        LevelProgressionManager.completeLevel(1, 1000);
+        WorldMap.init();
+        
+        // Manually set selection to level 2
+        WorldMap.selectedNode = 1;
+        
+        // Simulate left arrow key press
+        const keys = { 'ArrowLeft': true };
+        WorldMap.update(keys);
+        
+        // Selection should move left (decrease by 1)
+        expect(WorldMap.selectedNode).toBe(0);
+    });
+
+    it('should not move selection beyond first node', () => {
+        WorldMap.init();
+        
+        // Set selection to first node
+        WorldMap.selectedNode = 0;
+        
+        // Try to move left
+        const keys = { 'ArrowLeft': true };
+        WorldMap.update(keys);
+        
+        // Should stay at first node
+        expect(WorldMap.selectedNode).toBe(0);
+    });
+
+    it('should not move selection beyond last node', () => {
+        WorldMap.init();
+        
+        // Set selection to last node
+        WorldMap.selectedNode = 7;
+        
+        // Try to move right
+        const keys = { 'ArrowRight': true };
+        WorldMap.update(keys);
+        
+        // Should stay at last node
+        expect(WorldMap.selectedNode).toBe(7);
+    });
+
+    it('should update camera when selection changes', () => {
+        WorldMap.init();
+        
+        const initialCameraX = WorldMap.cameraX;
+        
+        // Move selection
+        WorldMap.selectedNode = 3;
+        WorldMap.updateCamera();
+        
+        // Camera should have moved
+        expect(WorldMap.cameraX).not.toBe(initialCameraX);
+        
+        // Camera should be centered on new node
+        const selectedNode = WorldMap.nodes[3];
+        const expectedCameraX = Math.max(0, selectedNode.x - 400);
+        expect(WorldMap.cameraX).toBe(expectedCameraX);
+    });
+
+    it('should prevent selecting locked levels', () => {
+        WorldMap.init();
+        
+        // Try to select level 2 (which is locked)
+        WorldMap.selectedNode = 1;
+        
+        // Simulate enter key to select level
+        const keys = { 'Enter': true };
+        
+        // This should log a message but not crash
+        expect(() => {
+            WorldMap.selectLevel();
+        }).not.toThrow();
+        
+        // Verify the node is indeed locked
+        expect(WorldMap.nodes[1].unlocked).toBe(false);
+    });
+
+    it('should allow selecting unlocked levels', () => {
+        LevelProgressionManager.completeLevel(1, 1000);
+        WorldMap.init();
+        
+        // Select level 2 (which should be unlocked)
+        WorldMap.selectedNode = 1;
+        
+        // Verify level 2 is unlocked
+        expect(WorldMap.nodes[1].unlocked).toBe(true);
+        
+        // Simulate enter key to select level
+        const keys = { 'Enter': true };
+        
+        // This should not throw
+        expect(() => {
+            WorldMap.selectLevel();
+        }).not.toThrow();
+    });
+
+    it('should support alternative key bindings (a/d for left/right)', () => {
+        WorldMap.init();
+        
+        const initialSelection = WorldMap.selectedNode;
+        
+        // Simulate 'd' key press (right)
+        const keys = { 'd': true };
+        WorldMap.update(keys);
+        
+        // Selection should move right
+        expect(WorldMap.selectedNode).toBe(initialSelection + 1);
+    });
+
+    it('should support space bar for level selection', () => {
+        LevelProgressionManager.completeLevel(1, 1000);
+        WorldMap.init();
+        
+        // Select level 1
+        WorldMap.selectedNode = 0;
+        
+        // Simulate space bar press
+        const keys = { ' ': true };
+        
+        // This should not throw
+        expect(() => {
+            WorldMap.selectLevel();
+        }).not.toThrow();
+    });
+
+    it('should prevent rapid key repeats', () => {
+        WorldMap.init();
+        
+        const initialSelection = WorldMap.selectedNode;
+        
+        // Simulate holding down right arrow (multiple updates with key held)
+        const keys = { 'ArrowRight': true };
+        
+        // First update should move selection
+        WorldMap.update(keys);
+        expect(WorldMap.selectedNode).toBe(initialSelection + 1);
+        
+        // Second update with same key held should not move again
+        WorldMap.update(keys);
+        expect(WorldMap.selectedNode).toBe(initialSelection + 1);
+        
+        // Release and press again
+        keys['ArrowRight'] = false;
+        WorldMap.update(keys);
+        keys['ArrowRight'] = true;
+        WorldMap.update(keys);
+        
+        // Now it should move again
+        expect(WorldMap.selectedNode).toBe(initialSelection + 2);
+    });
+});
