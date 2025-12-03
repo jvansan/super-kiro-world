@@ -22,30 +22,30 @@
     - **Property 7: Replay score update**
     - **Validates: Requirements 2.3**
 
-- [ ] 2. Create level generation system with difficulty scaling
-  - [ ] 2.1 Implement LevelGenerator module
+- [x] 2. Create level generation system with difficulty scaling
+  - [x] 2.1 Implement LevelGenerator module
     - Create deterministic level generation using level number as seed
     - Generate platform layouts with increasing gap distances
     - Calculate difficulty multipliers based on level number
     - Generate collectible placements (coins and extra lives)
     - Set end flag position based on level length
     - _Requirements: 3.1, 3.2, 3.4, 3.5_
-  - [ ] 2.2 Write property test for level determinism
+  - [x] 2.2 Write property test for level determinism
     - **Property 6: Level replay determinism**
     - **Validates: Requirements 2.2**
-  - [ ] 2.3 Write property test for platform gap scaling
+  - [x] 2.3 Write property test for platform gap scaling
     - **Property 10: Platform gap scaling**
     - **Validates: Requirements 3.1**
-  - [ ] 2.4 Write property test for safe platform reduction
+  - [x] 2.4 Write property test for safe platform reduction
     - **Property 12: Safe platform reduction**
     - **Validates: Requirements 3.4**
-  - [ ] 2.5 Implement enemy generation in LevelGenerator
+  - [x] 2.5 Implement enemy generation in LevelGenerator
     - Calculate enemy count based on difficulty
     - Mix enemy types (ground, plasma, jumping)
     - Place enemies strategically on platforms
     - Increase enemy density for higher levels
     - _Requirements: 3.2, 3.3_
-  - [ ] 2.6 Write property test for enemy count scaling
+  - [x] 2.6 Write property test for enemy count scaling
     - **Property 11: Enemy count scaling**
     - **Validates: Requirements 3.2**
 

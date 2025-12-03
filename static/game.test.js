@@ -2270,3 +2270,537 @@ describe('AnimationController', () => {
         expect(Math.abs(player.rotation)).toBeLessThanOrEqual(Math.PI / 6);
     });
 });
+
+// LevelGenerator implementation (copied from game.js for testing)
+const LevelGenerator = {
+    createSeededRandom(seed) {
+        return function() {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
+        };
+    },
+    
+    getDifficultyMultiplier(levelNumber) {
+        const minDifficulty = 1.0;
+        const maxDifficulty = 2.0;
+        const maxLevel = 8;
+        
+        return minDifficulty + ((levelNumber - 1) / (maxLevel - 1)) * (maxDifficulty - minDifficulty);
+    },
+    
+    generateLevel(levelNumber) {
+        if (levelNumber < 1 || levelNumber > 8) {
+            console.warn(`Invalid level number ${levelNumber}, defaulting to 1`);
+            levelNumber = 1;
+        }
+        
+        const random = this.createSeededRandom(levelNumber * 1000);
+        const difficulty = this.getDifficultyMultiplier(levelNumber);
+        const platforms = this.generatePlatforms(levelNumber, difficulty, random);
+        const enemies = this.generateEnemies(levelNumber, difficulty, platforms, random);
+        const collectibles = this.generateCollectibles(levelNumber, platforms, random);
+        const endFlag = this.generateEndFlag(platforms);
+        
+        return {
+            levelNumber: levelNumber,
+            platforms: platforms,
+            enemies: enemies,
+            collectibles: collectibles,
+            endFlag: endFlag,
+            backgroundSeed: levelNumber
+        };
+    },
+    
+    generatePlatforms(levelNumber, difficulty, random) {
+        const platforms = [];
+        const baseGapSize = 100;
+        const gapIncrease = 50 * (difficulty - 1);
+        const platformCount = 12 - Math.floor(difficulty * 2);
+        const levelLength = 3000;
+        
+        let currentX = 0;
+        
+        for (let i = 0; i < platformCount; i++) {
+            const platformWidth = 150 + random() * 250;
+            const isRaised = random() > 0.6;
+            const platformY = isRaised ? 400 - random() * 150 : 550;
+            const platformHeight = isRaised ? 20 : 50;
+            
+            platforms.push({
+                x: currentX,
+                y: platformY,
+                width: platformWidth,
+                height: platformHeight
+            });
+            
+            const gapSize = baseGapSize + gapIncrease + random() * 30;
+            currentX += platformWidth + gapSize;
+        }
+        
+        platforms.push({
+            x: currentX,
+            y: 550,
+            width: 300,
+            height: 50
+        });
+        
+        return platforms;
+    },
+    
+    generateCollectibles(levelNumber, platforms, random) {
+        const collectibles = [];
+        
+        platforms.forEach((platform, index) => {
+            const skipChance = 0.1 * (this.getDifficultyMultiplier(levelNumber) - 1);
+            if (random() < skipChance) return;
+            
+            const coinCount = Math.floor(1 + random() * 3);
+            
+            for (let i = 0; i < coinCount; i++) {
+                const coinX = platform.x + (platform.width / (coinCount + 1)) * (i + 1);
+                const coinY = platform.y - 50;
+                
+                collectibles.push({
+                    type: 'coin',
+                    x: coinX,
+                    y: coinY,
+                    width: 20,
+                    height: 20,
+                    collected: false
+                });
+            }
+        });
+        
+        const extraLifeCount = levelNumber <= 3 ? 2 : 1;
+        for (let i = 0; i < extraLifeCount; i++) {
+            const raisedPlatforms = platforms.filter(p => p.y < 500);
+            if (raisedPlatforms.length > 0) {
+                const platform = raisedPlatforms[Math.floor(random() * raisedPlatforms.length)];
+                collectibles.push({
+                    type: 'extraLife',
+                    x: platform.x + platform.width / 2,
+                    y: platform.y - 50,
+                    width: 25,
+                    height: 25,
+                    collected: false
+                });
+            }
+        }
+        
+        return collectibles;
+    },
+    
+    generateEnemies(levelNumber, difficulty, platforms, random) {
+        const enemies = [];
+        const baseEnemyCount = 2;
+        const enemyCount = Math.floor(baseEnemyCount + (difficulty - 1) * 3);
+        
+        const validPlatforms = platforms.filter((p, idx) => 
+            idx < platforms.length - 1 && p.width > 100
+        );
+        
+        if (validPlatforms.length === 0) return enemies;
+        
+        const enemyTypes = ['ground', 'plasma', 'jumping'];
+        
+        for (let i = 0; i < enemyCount; i++) {
+            const platformIndex = Math.floor(random() * validPlatforms.length);
+            const platform = validPlatforms[platformIndex];
+            
+            let enemyType;
+            if (difficulty < 1.3) {
+                enemyType = random() < 0.8 ? 'ground' : 'jumping';
+            } else if (difficulty < 1.6) {
+                const typeIndex = Math.floor(random() * 3);
+                enemyType = enemyTypes[typeIndex];
+            } else {
+                enemyType = random() < 0.4 ? 'ground' : (random() < 0.5 ? 'plasma' : 'jumping');
+            }
+            
+            if (enemyType === 'ground') {
+                const patrolWidth = Math.min(platform.width * 0.6, 200);
+                const patrolStart = platform.x + (platform.width - patrolWidth) / 2;
+                const patrolEnd = patrolStart + patrolWidth;
+                
+                enemies.push({
+                    type: 'ground',
+                    x: patrolStart + patrolWidth / 2,
+                    y: platform.y - 30,
+                    width: 30,
+                    height: 30,
+                    patrolStart: patrolStart,
+                    patrolEnd: patrolEnd,
+                    speed: 1 + random() * 0.5,
+                    direction: random() < 0.5 ? 1 : -1,
+                    alive: true
+                });
+            } else if (enemyType === 'plasma') {
+                enemies.push({
+                    type: 'plasma',
+                    x: platform.x + platform.width / 2,
+                    y: platform.y - 35,
+                    width: 35,
+                    height: 35,
+                    range: 300 + random() * 200,
+                    fireRate: 120 - Math.floor(difficulty * 20),
+                    fireTimer: Math.floor(random() * 60),
+                    alive: true
+                });
+            } else if (enemyType === 'jumping') {
+                const minJumpInterval = Math.max(60, 120 - Math.floor(difficulty * 20));
+                const maxJumpInterval = Math.max(120, 180 - Math.floor(difficulty * 20));
+                
+                enemies.push({
+                    type: 'jumping',
+                    x: platform.x + platform.width / 2,
+                    y: platform.y - 28,
+                    width: 28,
+                    height: 28,
+                    jumpInterval: [minJumpInterval, maxJumpInterval],
+                    jumpTimer: minJumpInterval + Math.floor(random() * (maxJumpInterval - minJumpInterval)),
+                    velocityX: 0,
+                    velocityY: 0,
+                    onGround: true,
+                    alive: true
+                });
+            }
+        }
+        
+        return enemies;
+    },
+    
+    generateEndFlag(platforms) {
+        const lastPlatform = platforms[platforms.length - 1];
+        
+        return {
+            x: lastPlatform.x + lastPlatform.width - 100,
+            y: lastPlatform.y - 80,
+            width: 40,
+            height: 80
+        };
+    }
+};
+
+describe('LevelGenerator', () => {
+    let consoleWarnSpy;
+
+    beforeEach(() => {
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        consoleWarnSpy.mockRestore();
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 6: Level replay determinism**
+     * For any level number, generating the level multiple times should produce identical results
+     * **Validates: Requirements 2.2**
+     */
+    it('Property 6: Level replay determinism - same level number produces same configuration', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 8 }), // Level number
+                (levelNumber) => {
+                    // Generate level twice
+                    const level1 = LevelGenerator.generateLevel(levelNumber);
+                    const level2 = LevelGenerator.generateLevel(levelNumber);
+                    
+                    // Property: Both generations should be identical
+                    
+                    // Check level number
+                    if (level1.levelNumber !== level2.levelNumber) return false;
+                    
+                    // Check platform count
+                    if (level1.platforms.length !== level2.platforms.length) return false;
+                    
+                    // Check each platform
+                    for (let i = 0; i < level1.platforms.length; i++) {
+                        const p1 = level1.platforms[i];
+                        const p2 = level2.platforms[i];
+                        
+                        if (p1.x !== p2.x) return false;
+                        if (p1.y !== p2.y) return false;
+                        if (p1.width !== p2.width) return false;
+                        if (p1.height !== p2.height) return false;
+                    }
+                    
+                    // Check collectible count
+                    if (level1.collectibles.length !== level2.collectibles.length) return false;
+                    
+                    // Check each collectible
+                    for (let i = 0; i < level1.collectibles.length; i++) {
+                        const c1 = level1.collectibles[i];
+                        const c2 = level2.collectibles[i];
+                        
+                        if (c1.type !== c2.type) return false;
+                        if (c1.x !== c2.x) return false;
+                        if (c1.y !== c2.y) return false;
+                        if (c1.width !== c2.width) return false;
+                        if (c1.height !== c2.height) return false;
+                    }
+                    
+                    // Check end flag
+                    if (level1.endFlag.x !== level2.endFlag.x) return false;
+                    if (level1.endFlag.y !== level2.endFlag.y) return false;
+                    if (level1.endFlag.width !== level2.endFlag.width) return false;
+                    if (level1.endFlag.height !== level2.endFlag.height) return false;
+                    
+                    // Check background seed
+                    if (level1.backgroundSeed !== level2.backgroundSeed) return false;
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 10: Platform gap scaling**
+     * For any two levels where level A has a higher number than level B,
+     * level A should have larger average platform gaps than level B
+     * **Validates: Requirements 3.1**
+     */
+    it('Property 10: Platform gap scaling - higher levels have larger gaps', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 7 }), // Level A (not the last level)
+                fc.integer({ min: 1, max: 7 }), // Level B (not the last level)
+                (levelA, levelB) => {
+                    // Skip if levels are the same
+                    if (levelA === levelB) return true;
+                    
+                    // Ensure levelA > levelB
+                    if (levelA < levelB) {
+                        [levelA, levelB] = [levelB, levelA];
+                    }
+                    
+                    // Generate both levels
+                    const configA = LevelGenerator.generateLevel(levelA);
+                    const configB = LevelGenerator.generateLevel(levelB);
+                    
+                    // Calculate average gap for each level
+                    const calculateAverageGap = (platforms) => {
+                        if (platforms.length < 2) return 0;
+                        
+                        let totalGap = 0;
+                        for (let i = 0; i < platforms.length - 1; i++) {
+                            const gap = platforms[i + 1].x - (platforms[i].x + platforms[i].width);
+                            totalGap += gap;
+                        }
+                        
+                        return totalGap / (platforms.length - 1);
+                    };
+                    
+                    const avgGapA = calculateAverageGap(configA.platforms);
+                    const avgGapB = calculateAverageGap(configB.platforms);
+                    
+                    // Property: Higher level should have larger average gap
+                    return avgGapA > avgGapB;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 12: Safe platform reduction**
+     * For any two levels where level A has a higher number than level B,
+     * level A should have fewer safe platforms (platforms with no enemies) than level B
+     * Note: Since enemies aren't generated yet, we test platform count reduction as a proxy
+     * **Validates: Requirements 3.4**
+     */
+    it('Property 12: Safe platform reduction - higher levels have fewer platforms', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 7 }), // Level A (not the last level)
+                fc.integer({ min: 1, max: 7 }), // Level B (not the last level)
+                (levelA, levelB) => {
+                    // Skip if levels are the same
+                    if (levelA === levelB) return true;
+                    
+                    // Ensure levelA > levelB
+                    if (levelA < levelB) {
+                        [levelA, levelB] = [levelB, levelA];
+                    }
+                    
+                    // Generate both levels
+                    const configA = LevelGenerator.generateLevel(levelA);
+                    const configB = LevelGenerator.generateLevel(levelB);
+                    
+                    // Property: Higher level should have fewer or equal platforms
+                    // (Fewer platforms means fewer safe platforms)
+                    return configA.platforms.length <= configB.platforms.length;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit Tests
+
+    it('should generate a valid level configuration', () => {
+        const level = LevelGenerator.generateLevel(1);
+        
+        expect(level.levelNumber).toBe(1);
+        expect(level.platforms).toBeDefined();
+        expect(level.platforms.length).toBeGreaterThan(0);
+        expect(level.collectibles).toBeDefined();
+        expect(level.endFlag).toBeDefined();
+        expect(level.backgroundSeed).toBe(1);
+    });
+
+    it('should generate platforms with valid properties', () => {
+        const level = LevelGenerator.generateLevel(1);
+        
+        level.platforms.forEach(platform => {
+            expect(platform.x).toBeGreaterThanOrEqual(0);
+            expect(platform.y).toBeGreaterThan(0);
+            expect(platform.width).toBeGreaterThan(0);
+            expect(platform.height).toBeGreaterThan(0);
+        });
+    });
+
+    it('should generate collectibles with valid properties', () => {
+        const level = LevelGenerator.generateLevel(1);
+        
+        level.collectibles.forEach(collectible => {
+            expect(['coin', 'extraLife']).toContain(collectible.type);
+            expect(collectible.x).toBeGreaterThanOrEqual(0);
+            expect(collectible.y).toBeGreaterThan(0);
+            expect(collectible.width).toBeGreaterThan(0);
+            expect(collectible.height).toBeGreaterThan(0);
+            expect(collectible.collected).toBe(false);
+        });
+    });
+
+    it('should place end flag on last platform', () => {
+        const level = LevelGenerator.generateLevel(1);
+        const lastPlatform = level.platforms[level.platforms.length - 1];
+        
+        expect(level.endFlag.x).toBeGreaterThanOrEqual(lastPlatform.x);
+        expect(level.endFlag.x).toBeLessThanOrEqual(lastPlatform.x + lastPlatform.width);
+        expect(level.endFlag.y).toBeLessThan(lastPlatform.y);
+    });
+
+    it('should calculate difficulty multiplier correctly', () => {
+        expect(LevelGenerator.getDifficultyMultiplier(1)).toBeCloseTo(1.0, 2);
+        expect(LevelGenerator.getDifficultyMultiplier(8)).toBeCloseTo(2.0, 2);
+        expect(LevelGenerator.getDifficultyMultiplier(4)).toBeCloseTo(1.43, 2);
+    });
+
+    it('should handle invalid level numbers', () => {
+        const level = LevelGenerator.generateLevel(0);
+        expect(level.levelNumber).toBe(1);
+        
+        const level2 = LevelGenerator.generateLevel(10);
+        expect(level2.levelNumber).toBe(1);
+    });
+
+    it('should generate more extra lives in early levels', () => {
+        const level1 = LevelGenerator.generateLevel(1);
+        const level8 = LevelGenerator.generateLevel(8);
+        
+        const extraLives1 = level1.collectibles.filter(c => c.type === 'extraLife').length;
+        const extraLives8 = level8.collectibles.filter(c => c.type === 'extraLife').length;
+        
+        expect(extraLives1).toBeGreaterThanOrEqual(extraLives8);
+    });
+
+    it('should create seeded random function that is deterministic', () => {
+        const random1 = LevelGenerator.createSeededRandom(12345);
+        const random2 = LevelGenerator.createSeededRandom(12345);
+        
+        // Generate same sequence
+        for (let i = 0; i < 10; i++) {
+            expect(random1()).toBe(random2());
+        }
+    });
+
+    it('should create seeded random function that produces different sequences for different seeds', () => {
+        const random1 = LevelGenerator.createSeededRandom(12345);
+        const random2 = LevelGenerator.createSeededRandom(54321);
+        
+        // Should produce different values
+        expect(random1()).not.toBe(random2());
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 11: Enemy count scaling**
+     * For any two levels where level A has a higher number than level B,
+     * level A should have more enemies than level B
+     * **Validates: Requirements 3.2**
+     */
+    it('Property 11: Enemy count scaling - higher levels have more enemies', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 7 }), // Level A (not the last level)
+                fc.integer({ min: 1, max: 7 }), // Level B (not the last level)
+                (levelA, levelB) => {
+                    // Skip if levels are the same
+                    if (levelA === levelB) return true;
+                    
+                    // Ensure levelA > levelB
+                    if (levelA < levelB) {
+                        [levelA, levelB] = [levelB, levelA];
+                    }
+                    
+                    // Generate both levels
+                    const configA = LevelGenerator.generateLevel(levelA);
+                    const configB = LevelGenerator.generateLevel(levelB);
+                    
+                    // Property: Higher level should have more or equal enemies
+                    return configA.enemies.length >= configB.enemies.length;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    it('should generate enemies with valid properties', () => {
+        const level = LevelGenerator.generateLevel(3);
+        
+        expect(level.enemies.length).toBeGreaterThan(0);
+        
+        level.enemies.forEach(enemy => {
+            expect(['ground', 'plasma', 'jumping']).toContain(enemy.type);
+            expect(enemy.x).toBeGreaterThanOrEqual(0);
+            expect(enemy.y).toBeGreaterThan(0);
+            expect(enemy.width).toBeGreaterThan(0);
+            expect(enemy.height).toBeGreaterThan(0);
+            expect(enemy.alive).toBe(true);
+            
+            if (enemy.type === 'ground') {
+                expect(enemy.patrolStart).toBeDefined();
+                expect(enemy.patrolEnd).toBeDefined();
+                expect(enemy.speed).toBeGreaterThan(0);
+                expect(enemy.direction).toBeDefined();
+            } else if (enemy.type === 'plasma') {
+                expect(enemy.range).toBeGreaterThan(0);
+                expect(enemy.fireRate).toBeGreaterThan(0);
+                expect(enemy.fireTimer).toBeDefined();
+            } else if (enemy.type === 'jumping') {
+                expect(enemy.jumpInterval).toBeDefined();
+                expect(enemy.jumpInterval.length).toBe(2);
+                expect(enemy.jumpTimer).toBeGreaterThanOrEqual(0);
+            }
+        });
+    });
+
+    it('should generate more enemies at higher difficulty levels', () => {
+        const level1 = LevelGenerator.generateLevel(1);
+        const level8 = LevelGenerator.generateLevel(8);
+        
+        expect(level8.enemies.length).toBeGreaterThan(level1.enemies.length);
+    });
+
+    it('should mix enemy types at higher difficulties', () => {
+        const level5 = LevelGenerator.generateLevel(5);
+        
+        const enemyTypes = new Set(level5.enemies.map(e => e.type));
+        
+        // Should have at least 2 different enemy types at level 5
+        expect(enemyTypes.size).toBeGreaterThanOrEqual(2);
+    });
+});

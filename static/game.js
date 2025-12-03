@@ -270,6 +270,258 @@ const LevelProgressionManager = {
     }
 };
 
+// LevelGenerator - Creates level configurations with difficulty scaling
+const LevelGenerator = {
+    // Seeded random number generator for deterministic generation
+    createSeededRandom(seed) {
+        return function() {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
+        };
+    },
+    
+    // Calculate difficulty multiplier based on level number
+    getDifficultyMultiplier(levelNumber) {
+        // Scale from 1.0 (level 1) to 2.0 (level 8)
+        const minDifficulty = 1.0;
+        const maxDifficulty = 2.0;
+        const maxLevel = 8;
+        
+        return minDifficulty + ((levelNumber - 1) / (maxLevel - 1)) * (maxDifficulty - minDifficulty);
+    },
+    
+    // Generate complete level configuration
+    generateLevel(levelNumber) {
+        // Validate level number
+        if (levelNumber < 1 || levelNumber > 8) {
+            console.warn(`Invalid level number ${levelNumber}, defaulting to 1`);
+            levelNumber = 1;
+        }
+        
+        // Create seeded random function
+        const random = this.createSeededRandom(levelNumber * 1000);
+        
+        // Calculate difficulty
+        const difficulty = this.getDifficultyMultiplier(levelNumber);
+        
+        // Generate level components
+        const platforms = this.generatePlatforms(levelNumber, difficulty, random);
+        const enemies = this.generateEnemies(levelNumber, difficulty, platforms, random);
+        const collectibles = this.generateCollectibles(levelNumber, platforms, random);
+        const endFlag = this.generateEndFlag(platforms);
+        
+        return {
+            levelNumber: levelNumber,
+            platforms: platforms,
+            enemies: enemies,
+            collectibles: collectibles,
+            endFlag: endFlag,
+            backgroundSeed: levelNumber
+        };
+    },
+    
+    // Generate platform layout with increasing gap distances
+    generatePlatforms(levelNumber, difficulty, random) {
+        const platforms = [];
+        
+        // Base parameters
+        const baseGapSize = 100;
+        const gapIncrease = 50 * (difficulty - 1); // Increases with difficulty
+        const platformCount = 12 - Math.floor(difficulty * 2); // Fewer platforms at higher difficulty
+        const levelLength = 3000;
+        
+        let currentX = 0;
+        
+        for (let i = 0; i < platformCount; i++) {
+            // Calculate platform width (varies between 150-400)
+            const platformWidth = 150 + random() * 250;
+            
+            // Determine if this is a ground or raised platform
+            const isRaised = random() > 0.6; // 40% chance of raised platform
+            const platformY = isRaised ? 400 - random() * 150 : 550; // Raised platforms between 250-400, ground at 550
+            const platformHeight = isRaised ? 20 : 50;
+            
+            // Add platform
+            platforms.push({
+                x: currentX,
+                y: platformY,
+                width: platformWidth,
+                height: platformHeight
+            });
+            
+            // Calculate gap to next platform (increases with difficulty)
+            // Reduced random variance to ensure monotonic gap scaling
+            const gapSize = baseGapSize + gapIncrease + random() * 30;
+            currentX += platformWidth + gapSize;
+        }
+        
+        // Ensure level ends with a solid platform for the flag
+        platforms.push({
+            x: currentX,
+            y: 550,
+            width: 300,
+            height: 50
+        });
+        
+        return platforms;
+    },
+    
+    // Generate collectible placements (coins and extra lives)
+    generateCollectibles(levelNumber, platforms, random) {
+        const collectibles = [];
+        
+        // Generate coins on and above platforms
+        platforms.forEach((platform, index) => {
+            // Skip some platforms at higher difficulty (fewer safe platforms)
+            const skipChance = 0.1 * (this.getDifficultyMultiplier(levelNumber) - 1);
+            if (random() < skipChance) return;
+            
+            // Number of coins on this platform (1-4)
+            const coinCount = Math.floor(1 + random() * 3);
+            
+            for (let i = 0; i < coinCount; i++) {
+                const coinX = platform.x + (platform.width / (coinCount + 1)) * (i + 1);
+                const coinY = platform.y - 50; // Above platform
+                
+                collectibles.push({
+                    type: 'coin',
+                    x: coinX,
+                    y: coinY,
+                    width: 20,
+                    height: 20,
+                    collected: false
+                });
+            }
+        });
+        
+        // Add extra lives (1-2 per level)
+        const extraLifeCount = levelNumber <= 3 ? 2 : 1; // More lives in early levels
+        for (let i = 0; i < extraLifeCount; i++) {
+            // Place on a random raised platform
+            const raisedPlatforms = platforms.filter(p => p.y < 500);
+            if (raisedPlatforms.length > 0) {
+                const platform = raisedPlatforms[Math.floor(random() * raisedPlatforms.length)];
+                collectibles.push({
+                    type: 'extraLife',
+                    x: platform.x + platform.width / 2,
+                    y: platform.y - 50,
+                    width: 25,
+                    height: 25,
+                    collected: false
+                });
+            }
+        }
+        
+        return collectibles;
+    },
+    
+    // Generate enemy placements with increasing density
+    generateEnemies(levelNumber, difficulty, platforms, random) {
+        const enemies = [];
+        
+        // Calculate enemy count based on difficulty (2-8 enemies)
+        const baseEnemyCount = 2;
+        const enemyCount = Math.floor(baseEnemyCount + (difficulty - 1) * 3);
+        
+        // Filter out the last platform (where the flag is) and very short platforms
+        const validPlatforms = platforms.filter((p, idx) => 
+            idx < platforms.length - 1 && p.width > 100
+        );
+        
+        if (validPlatforms.length === 0) return enemies;
+        
+        // Enemy type distribution (mix types as difficulty increases)
+        const enemyTypes = ['ground', 'plasma', 'jumping'];
+        
+        for (let i = 0; i < enemyCount; i++) {
+            // Select a random platform
+            const platformIndex = Math.floor(random() * validPlatforms.length);
+            const platform = validPlatforms[platformIndex];
+            
+            // Choose enemy type (more variety at higher difficulties)
+            let enemyType;
+            if (difficulty < 1.3) {
+                // Early levels: mostly ground enemies
+                enemyType = random() < 0.8 ? 'ground' : 'jumping';
+            } else if (difficulty < 1.6) {
+                // Mid levels: mix of all types
+                const typeIndex = Math.floor(random() * 3);
+                enemyType = enemyTypes[typeIndex];
+            } else {
+                // Late levels: more plasma and jumping enemies
+                enemyType = random() < 0.4 ? 'ground' : (random() < 0.5 ? 'plasma' : 'jumping');
+            }
+            
+            // Generate enemy based on type
+            if (enemyType === 'ground') {
+                // Ground enemy patrols along platform
+                const patrolWidth = Math.min(platform.width * 0.6, 200);
+                const patrolStart = platform.x + (platform.width - patrolWidth) / 2;
+                const patrolEnd = patrolStart + patrolWidth;
+                
+                enemies.push({
+                    type: 'ground',
+                    x: patrolStart + patrolWidth / 2,
+                    y: platform.y - 30,
+                    width: 30,
+                    height: 30,
+                    patrolStart: patrolStart,
+                    patrolEnd: patrolEnd,
+                    speed: 1 + random() * 0.5,
+                    direction: random() < 0.5 ? 1 : -1,
+                    alive: true
+                });
+            } else if (enemyType === 'plasma') {
+                // Plasma shooter stays in one place
+                enemies.push({
+                    type: 'plasma',
+                    x: platform.x + platform.width / 2,
+                    y: platform.y - 35,
+                    width: 35,
+                    height: 35,
+                    range: 300 + random() * 200,
+                    fireRate: 120 - Math.floor(difficulty * 20), // Faster at higher difficulty
+                    fireTimer: Math.floor(random() * 60),
+                    alive: true
+                });
+            } else if (enemyType === 'jumping') {
+                // Jumping enemy with random timing
+                const minJumpInterval = Math.max(60, 120 - Math.floor(difficulty * 20));
+                const maxJumpInterval = Math.max(120, 180 - Math.floor(difficulty * 20));
+                
+                enemies.push({
+                    type: 'jumping',
+                    x: platform.x + platform.width / 2,
+                    y: platform.y - 28,
+                    width: 28,
+                    height: 28,
+                    jumpInterval: [minJumpInterval, maxJumpInterval],
+                    jumpTimer: minJumpInterval + Math.floor(random() * (maxJumpInterval - minJumpInterval)),
+                    velocityX: 0,
+                    velocityY: 0,
+                    onGround: true,
+                    alive: true
+                });
+            }
+        }
+        
+        return enemies;
+    },
+    
+    // Generate end flag position
+    generateEndFlag(platforms) {
+        // Place flag on the last platform
+        const lastPlatform = platforms[platforms.length - 1];
+        
+        return {
+            x: lastPlatform.x + lastPlatform.width - 100,
+            y: lastPlatform.y - 80,
+            width: 40,
+            height: 80
+        };
+    }
+};
+
 // LeaderboardAPI - Handles communication with backend API
 const LeaderboardAPI = {
     BASE_URL: '/api/leaderboard',
