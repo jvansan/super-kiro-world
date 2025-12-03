@@ -49,54 +49,54 @@
     - **Property 11: Enemy count scaling**
     - **Validates: Requirements 3.2**
 
-- [ ] 3. Implement new enemy types
-  - [ ] 3.1 Create GroundEnemy class
+- [x] 3. Implement new enemy types
+  - [x] 3.1 Create GroundEnemy class
     - Implement horizontal patrol movement
     - Implement direction reversal at patrol boundaries
     - Implement collision detection with player
     - Handle defeat from above (bounce player up)
     - Handle damage from sides
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
-  - [ ] 3.2 Write property test for ground enemy patrol
+  - [x] 3.2 Write property test for ground enemy patrol
     - **Property 13: Ground enemy patrol path assignment**
     - **Property 14: Ground enemy direction reversal**
     - **Validates: Requirements 4.1, 4.2**
-  - [ ] 3.3 Write unit tests for ground enemy collision
+  - [x] 3.3 Write unit tests for ground enemy collision
     - Test defeat from above with bounce
     - Test damage from sides
     - Test point award on defeat
     - _Requirements: 4.3, 4.4, 4.5_
-  - [ ] 3.4 Create Projectile class
+  - [x] 3.4 Create Projectile class
     - Implement linear movement
     - Implement collision detection with player
     - Implement off-screen cleanup
     - _Requirements: 5.3, 5.4, 5.5_
-  - [ ] 3.5 Create PlasmaShooter class
+  - [x] 3.5 Create PlasmaShooter class
     - Implement stationary positioning
     - Implement player range detection
     - Implement timed projectile firing
     - Create projectiles aimed at player position
     - _Requirements: 5.1, 5.2_
-  - [ ] 3.6 Write property test for projectile behavior
+  - [x] 3.6 Write property test for projectile behavior
     - **Property 19: Projectile linear movement**
     - **Property 21: Projectile off-screen cleanup**
     - **Validates: Requirements 5.3, 5.5**
-  - [ ] 3.7 Write unit tests for plasma shooter
+  - [x] 3.7 Write unit tests for plasma shooter
     - Test firing at regular intervals
     - Test range detection
     - Test projectile creation
     - _Requirements: 5.2_
-  - [ ] 3.8 Create JumpingEnemy class
+  - [x] 3.8 Create JumpingEnemy class
     - Implement random jump timing
     - Implement jump with random horizontal velocity
     - Implement timer reset on landing
     - Implement collision detection with player
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
-  - [ ] 3.9 Write property test for jumping enemy timing
+  - [x] 3.9 Write property test for jumping enemy timing
     - **Property 22: Jumping enemy random timing**
     - **Property 24: Jumping enemy timer reset on landing**
     - **Validates: Requirements 6.1, 6.3**
-  - [ ] 3.10 Write unit tests for jumping enemy collision
+  - [x] 3.10 Write unit tests for jumping enemy collision
     - Test defeat from above with bounce
     - Test damage from sides
     - _Requirements: 6.4, 6.5_

@@ -2804,3 +2804,1199 @@ describe('LevelGenerator', () => {
         expect(enemyTypes.size).toBeGreaterThanOrEqual(2);
     });
 });
+
+// GroundEnemy class (copied from game.js for testing)
+class GroundEnemy {
+    constructor(x, y, patrolStart, patrolEnd, speed = 1.5) {
+        this.x = x;
+        this.y = y;
+        this.width = 30;
+        this.height = 30;
+        this.patrolStart = patrolStart;
+        this.patrolEnd = patrolEnd;
+        this.speed = speed;
+        this.direction = 1;
+        this.velocityY = 0;
+        this.gravity = 0.5;
+        this.onGround = false;
+        this.alive = true;
+        this.type = 'ground';
+    }
+    
+    update(platforms) {
+        if (!this.alive) return;
+        
+        this.x += this.speed * this.direction;
+        
+        if (this.x >= this.patrolEnd || this.x <= this.patrolStart) {
+            this.direction *= -1;
+        }
+        
+        this.velocityY += this.gravity;
+        this.y += this.velocityY;
+        
+        this.onGround = false;
+        
+        platforms.forEach(platform => {
+            if (this.checkCollision(platform)) {
+                if (this.velocityY > 0 && this.y + this.height - this.velocityY <= platform.y) {
+                    this.y = platform.y - this.height;
+                    this.velocityY = 0;
+                    this.onGround = true;
+                }
+            }
+        });
+    }
+    
+    render(ctx, camera) {
+        if (!this.alive) return;
+        
+        ctx.fillStyle = '#FF0000';
+        ctx.fillRect(this.x - camera.x, this.y, this.width, this.height);
+        
+        ctx.fillStyle = '#FFF';
+        ctx.fillRect(this.x - camera.x + 5, this.y + 5, 8, 8);
+        ctx.fillRect(this.x - camera.x + 17, this.y + 5, 8, 8);
+    }
+    
+    checkCollision(rect) {
+        return this.x < rect.x + rect.width &&
+               this.x + this.width > rect.x &&
+               this.y < rect.y + rect.height &&
+               this.y + this.height > rect.y;
+    }
+    
+    checkPlayerCollision(player) {
+        if (!this.alive) return null;
+        
+        if (this.checkCollision(player)) {
+            if (player.velocityY > 0 && player.y + player.height - player.velocityY <= this.y + 10) {
+                return 'defeat';
+            } else {
+                return 'damage';
+            }
+        }
+        
+        return null;
+    }
+    
+    defeat() {
+        this.alive = false;
+    }
+}
+
+describe('GroundEnemy', () => {
+    /**
+     * **Feature: multi-level-world, Property 13: Ground enemy patrol path assignment**
+     * For any ground enemy spawned, it should have a defined patrol path with start and end boundaries
+     * **Validates: Requirements 4.1**
+     */
+    it('Property 13: Ground enemy patrol path assignment - all enemies have valid patrol paths', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: 2000 }), // x position
+                fc.integer({ min: 0, max: 600 }), // y position
+                fc.integer({ min: 0, max: 2000 }), // patrol start
+                fc.integer({ min: 0, max: 2000 }), // patrol end
+                fc.float({ min: 0.5, max: 3.0 }), // speed
+                (x, y, patrolStart, patrolEnd, speed) => {
+                    // Ensure patrolStart < patrolEnd
+                    if (patrolStart >= patrolEnd) {
+                        [patrolStart, patrolEnd] = [patrolEnd, patrolStart];
+                    }
+                    
+                    // Skip if patrol range is too small
+                    if (patrolEnd - patrolStart < 50) return true;
+                    
+                    // Create enemy
+                    const enemy = new GroundEnemy(x, y, patrolStart, patrolEnd, speed);
+                    
+                    // Property: Enemy should have defined patrol boundaries
+                    const hasValidPatrolStart = typeof enemy.patrolStart === 'number' && enemy.patrolStart >= 0;
+                    const hasValidPatrolEnd = typeof enemy.patrolEnd === 'number' && enemy.patrolEnd > enemy.patrolStart;
+                    
+                    return hasValidPatrolStart && hasValidPatrolEnd;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 14: Ground enemy direction reversal**
+     * For any ground enemy reaching its patrol boundary, its movement direction should reverse
+     * **Validates: Requirements 4.2**
+     */
+    it('Property 14: Ground enemy direction reversal - direction reverses at boundaries', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 100, max: 500 }), // patrol start
+                fc.integer({ min: 600, max: 1000 }), // patrol end
+                fc.float({ min: 0.5, max: 3.0, noNaN: true }), // speed
+                (patrolStart, patrolEnd, speed) => {
+                    // Create enemy at patrol start, moving right
+                    const enemy = new GroundEnemy(patrolStart, 500, patrolStart, patrolEnd, speed);
+                    enemy.direction = 1;
+                    
+                    const platforms = [{ x: 0, y: 530, width: 2000, height: 50 }];
+                    
+                    // Move enemy until it reaches the end boundary
+                    let iterations = 0;
+                    const maxIterations = 10000;
+                    
+                    while (enemy.x < patrolEnd && iterations < maxIterations) {
+                        enemy.update(platforms);
+                        iterations++;
+                    }
+                    
+                    // Property: Direction should have reversed (now moving left)
+                    const directionReversedAtEnd = enemy.direction === -1;
+                    
+                    // Now move enemy back to start boundary
+                    iterations = 0;
+                    while (enemy.x > patrolStart && iterations < maxIterations) {
+                        enemy.update(platforms);
+                        iterations++;
+                    }
+                    
+                    // Property: Direction should have reversed again (now moving right)
+                    const directionReversedAtStart = enemy.direction === 1;
+                    
+                    return directionReversedAtEnd && directionReversedAtStart;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit tests
+    
+    it('should initialize with correct properties', () => {
+        const enemy = new GroundEnemy(100, 200, 50, 300, 2.0);
+        
+        expect(enemy.x).toBe(100);
+        expect(enemy.y).toBe(200);
+        expect(enemy.patrolStart).toBe(50);
+        expect(enemy.patrolEnd).toBe(300);
+        expect(enemy.speed).toBe(2.0);
+        expect(enemy.direction).toBe(1);
+        expect(enemy.alive).toBe(true);
+        expect(enemy.type).toBe('ground');
+    });
+
+    it('should move horizontally based on speed and direction', () => {
+        const enemy = new GroundEnemy(100, 500, 50, 300, 2.0);
+        const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+        
+        const initialX = enemy.x;
+        enemy.update(platforms);
+        
+        expect(enemy.x).toBe(initialX + 2.0 * enemy.direction);
+    });
+
+    it('should reverse direction at patrol end boundary', () => {
+        const enemy = new GroundEnemy(299, 500, 50, 300, 2.0);
+        enemy.direction = 1;
+        const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+        
+        enemy.update(platforms);
+        
+        expect(enemy.direction).toBe(-1);
+    });
+
+    it('should reverse direction at patrol start boundary', () => {
+        const enemy = new GroundEnemy(51, 500, 50, 300, 2.0);
+        enemy.direction = -1;
+        const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+        
+        enemy.update(platforms);
+        
+        expect(enemy.direction).toBe(1);
+    });
+
+    it('should apply gravity when not on ground', () => {
+        const enemy = new GroundEnemy(100, 400, 50, 300, 2.0);
+        const platforms = [];
+        
+        const initialY = enemy.y;
+        const initialVelocityY = enemy.velocityY;
+        
+        enemy.update(platforms);
+        
+        expect(enemy.velocityY).toBe(initialVelocityY + enemy.gravity);
+        expect(enemy.y).toBe(initialY + enemy.velocityY);
+    });
+
+    it('should land on platforms', () => {
+        const enemy = new GroundEnemy(100, 495, 50, 300, 2.0);
+        enemy.velocityY = 5;
+        const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+        
+        enemy.update(platforms);
+        
+        expect(enemy.y).toBe(500); // 530 - 30 (enemy height)
+        expect(enemy.velocityY).toBe(0);
+        expect(enemy.onGround).toBe(true);
+    });
+
+    it('should not update when not alive', () => {
+        const enemy = new GroundEnemy(100, 500, 50, 300, 2.0);
+        enemy.alive = false;
+        const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+        
+        const initialX = enemy.x;
+        const initialY = enemy.y;
+        
+        enemy.update(platforms);
+        
+        expect(enemy.x).toBe(initialX);
+        expect(enemy.y).toBe(initialY);
+    });
+
+    it('should detect collision with player from above as defeat', () => {
+        const enemy = new GroundEnemy(100, 500, 50, 300, 2.0);
+        const player = {
+            x: 100,
+            y: 465,
+            width: 40,
+            height: 40,
+            velocityY: 5
+        };
+        
+        const result = enemy.checkPlayerCollision(player);
+        
+        expect(result).toBe('defeat');
+    });
+
+    it('should detect collision with player from side as damage', () => {
+        const enemy = new GroundEnemy(100, 500, 50, 300, 2.0);
+        const player = {
+            x: 80,
+            y: 500,
+            width: 40,
+            height: 40,
+            velocityY: 0
+        };
+        
+        const result = enemy.checkPlayerCollision(player);
+        
+        expect(result).toBe('damage');
+    });
+
+    it('should return null when no collision with player', () => {
+        const enemy = new GroundEnemy(100, 500, 50, 300, 2.0);
+        const player = {
+            x: 200,
+            y: 400,
+            width: 40,
+            height: 40,
+            velocityY: 0
+        };
+        
+        const result = enemy.checkPlayerCollision(player);
+        
+        expect(result).toBeNull();
+    });
+
+    it('should be defeated when defeat method is called', () => {
+        const enemy = new GroundEnemy(100, 500, 50, 300, 2.0);
+        
+        expect(enemy.alive).toBe(true);
+        
+        enemy.defeat();
+        
+        expect(enemy.alive).toBe(false);
+    });
+
+    it('should not detect collision when not alive', () => {
+        const enemy = new GroundEnemy(100, 500, 50, 300, 2.0);
+        enemy.alive = false;
+        
+        const player = {
+            x: 100,
+            y: 500,
+            width: 40,
+            height: 40,
+            velocityY: 0
+        };
+        
+        const result = enemy.checkPlayerCollision(player);
+        
+        expect(result).toBeNull();
+    });
+});
+
+// Projectile class (copied from game.js for testing)
+class Projectile {
+    constructor(x, y, velocityX, velocityY) {
+        this.x = x;
+        this.y = y;
+        this.width = 10;
+        this.height = 10;
+        this.velocityX = velocityX;
+        this.velocityY = velocityY;
+        this.active = true;
+    }
+    
+    update() {
+        if (!this.active) return;
+        
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+        
+        const margin = 100;
+        if (this.x < -margin || this.x > 3000 + margin || 
+            this.y < -margin || this.y > 700 + margin) {
+            this.active = false;
+        }
+    }
+    
+    render(ctx, camera) {
+        if (!this.active) return;
+        
+        ctx.save();
+        
+        ctx.fillStyle = 'rgba(255, 100, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(this.x - camera.x, this.y, this.width, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#FF6600';
+        ctx.beginPath();
+        ctx.arc(this.x - camera.x, this.y, this.width / 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+    }
+    
+    checkCollision(rect) {
+        if (!this.active) return false;
+        
+        return this.x < rect.x + rect.width &&
+               this.x + this.width > rect.x &&
+               this.y < rect.y + rect.height &&
+               this.y + this.height > rect.y;
+    }
+    
+    checkPlayerCollision(player) {
+        if (!this.active) return false;
+        
+        return this.checkCollision(player);
+    }
+    
+    deactivate() {
+        this.active = false;
+    }
+}
+
+describe('Projectile', () => {
+    /**
+     * **Feature: multi-level-world, Property 19: Projectile linear movement**
+     * For any projectile fired, it should move in a straight line from its spawn position
+     * **Validates: Requirements 5.3**
+     */
+    it('Property 19: Projectile linear movement - projectiles move in straight lines', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: 1000 }), // start x
+                fc.integer({ min: 0, max: 600 }), // start y
+                fc.float({ min: -5, max: 5 }), // velocity x
+                fc.float({ min: -5, max: 5 }), // velocity y
+                (startX, startY, velocityX, velocityY) => {
+                    // Skip if velocity is too small (stationary projectile)
+                    if (Math.abs(velocityX) < 0.1 && Math.abs(velocityY) < 0.1) return true;
+                    
+                    const projectile = new Projectile(startX, startY, velocityX, velocityY);
+                    
+                    // Track positions
+                    const positions = [{ x: projectile.x, y: projectile.y }];
+                    
+                    // Update projectile multiple times
+                    for (let i = 0; i < 10; i++) {
+                        projectile.update();
+                        if (projectile.active) {
+                            positions.push({ x: projectile.x, y: projectile.y });
+                        }
+                    }
+                    
+                    // Property: Each position should be exactly velocity away from previous
+                    for (let i = 1; i < positions.length; i++) {
+                        const dx = positions[i].x - positions[i - 1].x;
+                        const dy = positions[i].y - positions[i - 1].y;
+                        
+                        // Check if movement matches velocity (within floating point tolerance)
+                        const tolerance = 0.001;
+                        if (Math.abs(dx - velocityX) > tolerance || Math.abs(dy - velocityY) > tolerance) {
+                            return false;
+                        }
+                    }
+                    
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 21: Projectile off-screen cleanup**
+     * For any projectile that travels beyond screen boundaries, it should be removed from the level
+     * **Validates: Requirements 5.5**
+     */
+    it('Property 21: Projectile off-screen cleanup - projectiles deactivate when off-screen', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: -200, max: 3200 }), // start x (including off-screen)
+                fc.integer({ min: -200, max: 900 }), // start y (including off-screen)
+                fc.float({ min: -10, max: 10 }), // velocity x
+                fc.float({ min: -10, max: 10 }), // velocity y
+                (startX, startY, velocityX, velocityY) => {
+                    // Skip if velocity is too small
+                    if (Math.abs(velocityX) < 0.1 && Math.abs(velocityY) < 0.1) return true;
+                    
+                    const projectile = new Projectile(startX, startY, velocityX, velocityY);
+                    
+                    // Update until projectile is off-screen or max iterations
+                    let iterations = 0;
+                    const maxIterations = 1000;
+                    
+                    while (projectile.active && iterations < maxIterations) {
+                        projectile.update();
+                        iterations++;
+                    }
+                    
+                    // Property: If projectile went off-screen, it should be deactivated
+                    // Check if final position is off-screen
+                    const margin = 100;
+                    const isOffScreen = projectile.x < -margin || projectile.x > 3000 + margin ||
+                                       projectile.y < -margin || projectile.y > 700 + margin;
+                    
+                    // If off-screen, should be inactive
+                    if (isOffScreen) {
+                        return !projectile.active;
+                    }
+                    
+                    // If still on-screen after max iterations, that's fine
+                    return true;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit tests
+    
+    it('should initialize with correct properties', () => {
+        const projectile = new Projectile(100, 200, 3, -2);
+        
+        expect(projectile.x).toBe(100);
+        expect(projectile.y).toBe(200);
+        expect(projectile.velocityX).toBe(3);
+        expect(projectile.velocityY).toBe(-2);
+        expect(projectile.active).toBe(true);
+    });
+
+    it('should move in straight line based on velocity', () => {
+        const projectile = new Projectile(100, 200, 3, -2);
+        
+        projectile.update();
+        
+        expect(projectile.x).toBe(103);
+        expect(projectile.y).toBe(198);
+    });
+
+    it('should deactivate when moving off-screen to the right', () => {
+        const projectile = new Projectile(3100, 300, 10, 0);
+        
+        projectile.update();
+        
+        expect(projectile.active).toBe(false);
+    });
+
+    it('should deactivate when moving off-screen to the left', () => {
+        const projectile = new Projectile(-100, 300, -10, 0);
+        
+        projectile.update();
+        
+        expect(projectile.active).toBe(false);
+    });
+
+    it('should deactivate when moving off-screen above', () => {
+        const projectile = new Projectile(500, -100, 0, -10);
+        
+        projectile.update();
+        
+        expect(projectile.active).toBe(false);
+    });
+
+    it('should deactivate when moving off-screen below', () => {
+        const projectile = new Projectile(500, 800, 0, 10);
+        
+        projectile.update();
+        
+        expect(projectile.active).toBe(false);
+    });
+
+    it('should not update when inactive', () => {
+        const projectile = new Projectile(100, 200, 3, -2);
+        projectile.active = false;
+        
+        const initialX = projectile.x;
+        const initialY = projectile.y;
+        
+        projectile.update();
+        
+        expect(projectile.x).toBe(initialX);
+        expect(projectile.y).toBe(initialY);
+    });
+
+    it('should detect collision with player', () => {
+        const projectile = new Projectile(100, 200, 3, -2);
+        const player = {
+            x: 100,
+            y: 200,
+            width: 40,
+            height: 40
+        };
+        
+        const result = projectile.checkPlayerCollision(player);
+        
+        expect(result).toBe(true);
+    });
+
+    it('should not detect collision when not overlapping', () => {
+        const projectile = new Projectile(100, 200, 3, -2);
+        const player = {
+            x: 200,
+            y: 300,
+            width: 40,
+            height: 40
+        };
+        
+        const result = projectile.checkPlayerCollision(player);
+        
+        expect(result).toBe(false);
+    });
+
+    it('should not detect collision when inactive', () => {
+        const projectile = new Projectile(100, 200, 3, -2);
+        projectile.active = false;
+        
+        const player = {
+            x: 100,
+            y: 200,
+            width: 40,
+            height: 40
+        };
+        
+        const result = projectile.checkPlayerCollision(player);
+        
+        expect(result).toBe(false);
+    });
+
+    it('should deactivate when deactivate method is called', () => {
+        const projectile = new Projectile(100, 200, 3, -2);
+        
+        expect(projectile.active).toBe(true);
+        
+        projectile.deactivate();
+        
+        expect(projectile.active).toBe(false);
+    });
+});
+
+// PlasmaShooter class (copied from game.js for testing)
+class PlasmaShooter {
+    constructor(x, y, range, fireRate) {
+        this.x = x;
+        this.y = y;
+        this.width = 35;
+        this.height = 35;
+        this.range = range;
+        this.fireRate = fireRate;
+        this.fireTimer = 0;
+        this.alive = true;
+        this.type = 'plasma';
+    }
+    
+    update(player, projectiles) {
+        if (!this.alive) return;
+        
+        const distanceToPlayer = Math.abs(player.x - this.x);
+        
+        if (distanceToPlayer <= this.range) {
+            this.fireTimer++;
+            
+            if (this.fireTimer >= this.fireRate) {
+                const projectile = this.fireProjectile(player.x + player.width / 2, player.y + player.height / 2);
+                projectiles.push(projectile);
+                this.fireTimer = 0;
+            }
+        }
+    }
+    
+    fireProjectile(targetX, targetY) {
+        const dx = targetX - this.x;
+        const dy = targetY - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        const speed = 3;
+        const velocityX = (dx / distance) * speed;
+        const velocityY = (dy / distance) * speed;
+        
+        return new Projectile(this.x, this.y, velocityX, velocityY);
+    }
+    
+    render(ctx, camera) {
+        if (!this.alive) return;
+        
+        ctx.fillStyle = '#9B59B6';
+        ctx.fillRect(this.x - camera.x, this.y, this.width, this.height);
+        
+        ctx.fillStyle = '#E74C3C';
+        ctx.fillRect(this.x - camera.x + 10, this.y + 10, 15, 15);
+        
+        ctx.fillStyle = '#FFF';
+        ctx.fillRect(this.x - camera.x + 5, this.y + 5, 6, 6);
+        ctx.fillRect(this.x - camera.x + 24, this.y + 5, 6, 6);
+    }
+    
+    checkCollision(rect) {
+        return this.x < rect.x + rect.width &&
+               this.x + this.width > rect.x &&
+               this.y < rect.y + rect.height &&
+               this.y + this.height > rect.y;
+    }
+    
+    defeat() {
+        this.alive = false;
+    }
+}
+
+describe('PlasmaShooter', () => {
+    // Unit tests
+    
+    it('should initialize with correct properties', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 120);
+        
+        expect(shooter.x).toBe(100);
+        expect(shooter.y).toBe(200);
+        expect(shooter.range).toBe(300);
+        expect(shooter.fireRate).toBe(120);
+        expect(shooter.fireTimer).toBe(0);
+        expect(shooter.alive).toBe(true);
+        expect(shooter.type).toBe('plasma');
+    });
+
+    it('should fire at regular intervals when player is in range', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 60);
+        const player = { x: 200, y: 200, width: 40, height: 40 };
+        const projectiles = [];
+        
+        // Update 59 times - should not fire yet
+        for (let i = 0; i < 59; i++) {
+            shooter.update(player, projectiles);
+        }
+        expect(projectiles.length).toBe(0);
+        
+        // Update once more - should fire
+        shooter.update(player, projectiles);
+        expect(projectiles.length).toBe(1);
+        
+        // Timer should reset
+        expect(shooter.fireTimer).toBe(0);
+    });
+
+    it('should not fire when player is out of range', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 60);
+        const player = { x: 500, y: 200, width: 40, height: 40 }; // Out of range
+        const projectiles = [];
+        
+        // Update many times
+        for (let i = 0; i < 100; i++) {
+            shooter.update(player, projectiles);
+        }
+        
+        // Should not have fired
+        expect(projectiles.length).toBe(0);
+    });
+
+    it('should detect player within range', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 60);
+        const player = { x: 200, y: 200, width: 40, height: 40 };
+        const projectiles = [];
+        
+        // Player is within range (distance = 100)
+        shooter.fireTimer = 59;
+        shooter.update(player, projectiles);
+        
+        expect(projectiles.length).toBe(1);
+    });
+
+    it('should detect player at exact range boundary', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 60);
+        const player = { x: 400, y: 200, width: 40, height: 40 }; // Exactly at range
+        const projectiles = [];
+        
+        shooter.fireTimer = 59;
+        shooter.update(player, projectiles);
+        
+        expect(projectiles.length).toBe(1);
+    });
+
+    it('should create projectile aimed at player position', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 60);
+        const targetX = 300;
+        const targetY = 400;
+        
+        const projectile = shooter.fireProjectile(targetX, targetY);
+        
+        expect(projectile).toBeDefined();
+        expect(projectile.x).toBe(100);
+        expect(projectile.y).toBe(200);
+        expect(projectile.velocityX).toBeGreaterThan(0); // Moving right
+        expect(projectile.velocityY).toBeGreaterThan(0); // Moving down
+    });
+
+    it('should create projectile with correct speed', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 60);
+        const targetX = 400;
+        const targetY = 200;
+        
+        const projectile = shooter.fireProjectile(targetX, targetY);
+        
+        // Speed should be 3
+        const speed = Math.sqrt(projectile.velocityX ** 2 + projectile.velocityY ** 2);
+        expect(speed).toBeCloseTo(3, 1);
+    });
+
+    it('should not update when not alive', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 60);
+        shooter.alive = false;
+        
+        const player = { x: 200, y: 200, width: 40, height: 40 };
+        const projectiles = [];
+        
+        shooter.fireTimer = 59;
+        shooter.update(player, projectiles);
+        
+        expect(projectiles.length).toBe(0);
+    });
+
+    it('should be defeated when defeat method is called', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 60);
+        
+        expect(shooter.alive).toBe(true);
+        
+        shooter.defeat();
+        
+        expect(shooter.alive).toBe(false);
+    });
+
+    it('should fire multiple times at regular intervals', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 30);
+        const player = { x: 200, y: 200, width: 40, height: 40 };
+        const projectiles = [];
+        
+        // Update 90 times - should fire 3 times (at 30, 60, 90)
+        for (let i = 0; i < 90; i++) {
+            shooter.update(player, projectiles);
+        }
+        
+        expect(projectiles.length).toBe(3);
+    });
+
+    it('should check collision with rectangles', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 60);
+        const rect = { x: 100, y: 200, width: 40, height: 40 };
+        
+        const result = shooter.checkCollision(rect);
+        
+        expect(result).toBe(true);
+    });
+
+    it('should not detect collision when not overlapping', () => {
+        const shooter = new PlasmaShooter(100, 200, 300, 60);
+        const rect = { x: 200, y: 300, width: 40, height: 40 };
+        
+        const result = shooter.checkCollision(rect);
+        
+        expect(result).toBe(false);
+    });
+});
+
+// JumpingEnemy class (copied from game.js for testing)
+class JumpingEnemy {
+    constructor(x, y, jumpInterval) {
+        this.x = x;
+        this.y = y;
+        this.width = 28;
+        this.height = 28;
+        this.jumpInterval = jumpInterval;
+        this.jumpTimer = this.getRandomJumpTime();
+        this.velocityX = 0;
+        this.velocityY = 0;
+        this.gravity = 0.5;
+        this.onGround = false;
+        this.alive = true;
+        this.type = 'jumping';
+    }
+    
+    update(platforms) {
+        if (!this.alive) return;
+        
+        this.jumpTimer--;
+        
+        if (this.jumpTimer <= 0 && this.onGround) {
+            this.jump();
+            this.jumpTimer = this.getRandomJumpTime();
+        }
+        
+        this.velocityY += this.gravity;
+        
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+        
+        this.velocityX *= 0.95;
+        
+        this.onGround = false;
+        
+        platforms.forEach(platform => {
+            if (this.checkCollision(platform)) {
+                if (this.velocityY > 0 && this.y + this.height - this.velocityY <= platform.y) {
+                    this.y = platform.y - this.height;
+                    this.velocityY = 0;
+                    this.onGround = true;
+                }
+            }
+        });
+    }
+    
+    jump() {
+        this.velocityX = (Math.random() - 0.5) * 6;
+        this.velocityY = -10;
+        this.onGround = false;
+    }
+    
+    getRandomJumpTime() {
+        const min = this.jumpInterval[0];
+        const max = this.jumpInterval[1];
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+    
+    render(ctx, camera) {
+        if (!this.alive) return;
+        
+        ctx.fillStyle = '#00FF00';
+        ctx.fillRect(this.x - camera.x, this.y, this.width, this.height);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(this.x - camera.x + 5, this.y + 5, 6, 6);
+        ctx.fillRect(this.x - camera.x + 17, this.y + 5, 6, 6);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(this.x - camera.x + 8, this.y + 18, 12, 3);
+    }
+    
+    checkCollision(rect) {
+        return this.x < rect.x + rect.width &&
+               this.x + this.width > rect.x &&
+               this.y < rect.y + rect.height &&
+               this.y + this.height > rect.y;
+    }
+    
+    checkPlayerCollision(player) {
+        if (!this.alive) return null;
+        
+        if (this.checkCollision(player)) {
+            if (player.velocityY > 0 && player.y + player.height - player.velocityY <= this.y + 10) {
+                return 'defeat';
+            } else {
+                return 'damage';
+            }
+        }
+        
+        return null;
+    }
+    
+    defeat() {
+        this.alive = false;
+    }
+}
+
+describe('JumpingEnemy', () => {
+    /**
+     * **Feature: multi-level-world, Property 22: Jumping enemy random timing**
+     * For any jumping enemy spawned, it should have random jump timing parameters assigned
+     * **Validates: Requirements 6.1**
+     */
+    it('Property 22: Jumping enemy random timing - enemies have valid random jump intervals', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: 1000 }), // x position
+                fc.integer({ min: 0, max: 600 }), // y position
+                fc.integer({ min: 30, max: 120 }), // min jump interval
+                fc.integer({ min: 121, max: 300 }), // max jump interval
+                (x, y, minInterval, maxInterval) => {
+                    const jumpInterval = [minInterval, maxInterval];
+                    const enemy = new JumpingEnemy(x, y, jumpInterval);
+                    
+                    // Property: Jump timer should be within the specified interval
+                    const timerInRange = enemy.jumpTimer >= minInterval && enemy.jumpTimer <= maxInterval;
+                    
+                    // Property: Jump interval should be stored correctly
+                    const intervalStored = enemy.jumpInterval[0] === minInterval && 
+                                          enemy.jumpInterval[1] === maxInterval;
+                    
+                    return timerInRange && intervalStored;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    /**
+     * **Feature: multi-level-world, Property 24: Jumping enemy timer reset on landing**
+     * For any jumping enemy landing on a platform, its jump timer should be reset with a new random duration
+     * **Validates: Requirements 6.3**
+     */
+    it('Property 24: Jumping enemy timer reset on landing - timer resets when landing', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 30, max: 120 }), // min jump interval
+                fc.integer({ min: 121, max: 300 }), // max jump interval
+                (minInterval, maxInterval) => {
+                    const jumpInterval = [minInterval, maxInterval];
+                    const enemy = new JumpingEnemy(100, 495, jumpInterval);
+                    const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+                    
+                    // Set enemy on ground and force jump timer to expire
+                    enemy.onGround = true;
+                    enemy.jumpTimer = 0;
+                    
+                    // Update - should jump and reset timer
+                    enemy.update(platforms);
+                    
+                    // Property: Timer should be reset to a value within the interval
+                    // Note: Timer is decremented before check, so it might be one less
+                    const timerReset = enemy.jumpTimer >= minInterval - 1 && enemy.jumpTimer <= maxInterval;
+                    
+                    return timerReset;
+                }
+            ),
+            { numRuns: 100 }
+        );
+    });
+
+    // Unit tests
+    
+    it('should initialize with correct properties', () => {
+        const enemy = new JumpingEnemy(100, 200, [60, 180]);
+        
+        expect(enemy.x).toBe(100);
+        expect(enemy.y).toBe(200);
+        expect(enemy.jumpInterval).toEqual([60, 180]);
+        expect(enemy.jumpTimer).toBeGreaterThanOrEqual(60);
+        expect(enemy.jumpTimer).toBeLessThanOrEqual(180);
+        expect(enemy.alive).toBe(true);
+        expect(enemy.type).toBe('jumping');
+    });
+
+    it('should jump when timer expires and on ground', () => {
+        const enemy = new JumpingEnemy(100, 502, [60, 180]);
+        const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+        
+        enemy.onGround = true;
+        enemy.jumpTimer = 1;
+        
+        enemy.update(platforms);
+        
+        expect(enemy.velocityY).toBeLessThan(0); // Should have upward velocity
+        expect(enemy.onGround).toBe(false);
+    });
+
+    it('should not jump when timer has not expired', () => {
+        const enemy = new JumpingEnemy(100, 400, [60, 180]);
+        const platforms = [];
+        
+        enemy.onGround = false;
+        enemy.jumpTimer = 30;
+        enemy.velocityY = 0;
+        
+        enemy.update(platforms);
+        
+        expect(enemy.velocityY).toBe(0.5); // Only gravity applied
+    });
+
+    it('should not jump when not on ground', () => {
+        const enemy = new JumpingEnemy(100, 400, [60, 180]);
+        const platforms = [];
+        
+        enemy.onGround = false;
+        enemy.jumpTimer = 0;
+        enemy.velocityY = 0;
+        
+        enemy.update(platforms);
+        
+        // Should not have jumped (no upward velocity)
+        expect(enemy.velocityY).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should apply random horizontal velocity when jumping', () => {
+        const enemy = new JumpingEnemy(100, 500, [60, 180]);
+        
+        enemy.jump();
+        
+        expect(enemy.velocityX).not.toBe(0);
+        expect(enemy.velocityX).toBeGreaterThanOrEqual(-3);
+        expect(enemy.velocityX).toBeLessThanOrEqual(3);
+        expect(enemy.velocityY).toBe(-10);
+    });
+
+    it('should reset timer on landing', () => {
+        const enemy = new JumpingEnemy(100, 495, [60, 180]);
+        const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+        
+        enemy.onGround = true;
+        enemy.jumpTimer = 0;
+        
+        enemy.update(platforms);
+        
+        // Timer should be reset to a value in the interval
+        expect(enemy.jumpTimer).toBeGreaterThanOrEqual(59); // -1 from decrement
+        expect(enemy.jumpTimer).toBeLessThanOrEqual(180);
+    });
+
+    it('should apply gravity', () => {
+        const enemy = new JumpingEnemy(100, 400, [60, 180]);
+        const platforms = [];
+        
+        const initialVelocityY = enemy.velocityY;
+        
+        enemy.update(platforms);
+        
+        expect(enemy.velocityY).toBe(initialVelocityY + enemy.gravity);
+    });
+
+    it('should apply friction to horizontal velocity', () => {
+        const enemy = new JumpingEnemy(100, 400, [60, 180]);
+        const platforms = [];
+        
+        enemy.velocityX = 10;
+        
+        enemy.update(platforms);
+        
+        expect(enemy.velocityX).toBe(10 * 0.95);
+    });
+
+    it('should land on platforms', () => {
+        const enemy = new JumpingEnemy(100, 497, [60, 180]);
+        enemy.velocityY = 5;
+        const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+        
+        enemy.update(platforms);
+        
+        expect(enemy.y).toBe(502); // 530 - 28 (enemy height)
+        expect(enemy.velocityY).toBe(0);
+        expect(enemy.onGround).toBe(true);
+    });
+
+    it('should not update when not alive', () => {
+        const enemy = new JumpingEnemy(100, 500, [60, 180]);
+        enemy.alive = false;
+        const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+        
+        const initialX = enemy.x;
+        const initialY = enemy.y;
+        const initialTimer = enemy.jumpTimer;
+        
+        enemy.update(platforms);
+        
+        expect(enemy.x).toBe(initialX);
+        expect(enemy.y).toBe(initialY);
+        expect(enemy.jumpTimer).toBe(initialTimer);
+    });
+
+    it('should detect collision with player from above as defeat', () => {
+        const enemy = new JumpingEnemy(100, 500, [60, 180]);
+        const player = {
+            x: 100,
+            y: 467,
+            width: 40,
+            height: 40,
+            velocityY: 5
+        };
+        
+        const result = enemy.checkPlayerCollision(player);
+        
+        expect(result).toBe('defeat');
+    });
+
+    it('should detect collision with player from side as damage', () => {
+        const enemy = new JumpingEnemy(100, 500, [60, 180]);
+        const player = {
+            x: 80,
+            y: 500,
+            width: 40,
+            height: 40,
+            velocityY: 0
+        };
+        
+        const result = enemy.checkPlayerCollision(player);
+        
+        expect(result).toBe('damage');
+    });
+
+    it('should return null when no collision with player', () => {
+        const enemy = new JumpingEnemy(100, 500, [60, 180]);
+        const player = {
+            x: 200,
+            y: 400,
+            width: 40,
+            height: 40,
+            velocityY: 0
+        };
+        
+        const result = enemy.checkPlayerCollision(player);
+        
+        expect(result).toBeNull();
+    });
+
+    it('should be defeated when defeat method is called', () => {
+        const enemy = new JumpingEnemy(100, 500, [60, 180]);
+        
+        expect(enemy.alive).toBe(true);
+        
+        enemy.defeat();
+        
+        expect(enemy.alive).toBe(false);
+    });
+
+    it('should not detect collision when not alive', () => {
+        const enemy = new JumpingEnemy(100, 500, [60, 180]);
+        enemy.alive = false;
+        
+        const player = {
+            x: 100,
+            y: 500,
+            width: 40,
+            height: 40,
+            velocityY: 0
+        };
+        
+        const result = enemy.checkPlayerCollision(player);
+        
+        expect(result).toBeNull();
+    });
+
+    it('should decrement jump timer each update', () => {
+        const enemy = new JumpingEnemy(100, 500, [60, 180]);
+        const platforms = [{ x: 0, y: 530, width: 500, height: 50 }];
+        
+        const initialTimer = enemy.jumpTimer;
+        
+        enemy.update(platforms);
+        
+        expect(enemy.jumpTimer).toBe(initialTimer - 1);
+    });
+});

@@ -522,6 +522,355 @@ const LevelGenerator = {
     }
 };
 
+// GroundEnemy - Patrols horizontally along platforms
+class GroundEnemy {
+    constructor(x, y, patrolStart, patrolEnd, speed = 1.5) {
+        this.x = x;
+        this.y = y;
+        this.width = 30;
+        this.height = 30;
+        this.patrolStart = patrolStart;
+        this.patrolEnd = patrolEnd;
+        this.speed = speed;
+        this.direction = 1; // 1 for right, -1 for left
+        this.velocityY = 0;
+        this.gravity = 0.5;
+        this.onGround = false;
+        this.alive = true;
+        this.type = 'ground';
+    }
+    
+    update(platforms) {
+        if (!this.alive) return;
+        
+        // Horizontal patrol movement
+        this.x += this.speed * this.direction;
+        
+        // Direction reversal at patrol boundaries
+        if (this.x >= this.patrolEnd || this.x <= this.patrolStart) {
+            this.direction *= -1;
+        }
+        
+        // Apply gravity
+        this.velocityY += this.gravity;
+        this.y += this.velocityY;
+        
+        // Reset ground state
+        this.onGround = false;
+        
+        // Check platform collisions to keep enemy on platforms
+        platforms.forEach(platform => {
+            if (this.checkCollision(platform)) {
+                // Landing on top
+                if (this.velocityY > 0 && this.y + this.height - this.velocityY <= platform.y) {
+                    this.y = platform.y - this.height;
+                    this.velocityY = 0;
+                    this.onGround = true;
+                }
+            }
+        });
+    }
+    
+    render(ctx, camera) {
+        if (!this.alive) return;
+        
+        // Draw enemy body (red rectangle)
+        ctx.fillStyle = '#FF0000';
+        ctx.fillRect(this.x - camera.x, this.y, this.width, this.height);
+        
+        // Draw eyes (white rectangles)
+        ctx.fillStyle = '#FFF';
+        ctx.fillRect(this.x - camera.x + 5, this.y + 5, 8, 8);
+        ctx.fillRect(this.x - camera.x + 17, this.y + 5, 8, 8);
+    }
+    
+    checkCollision(rect) {
+        return this.x < rect.x + rect.width &&
+               this.x + this.width > rect.x &&
+               this.y < rect.y + rect.height &&
+               this.y + this.height > rect.y;
+    }
+    
+    checkPlayerCollision(player) {
+        if (!this.alive) return null;
+        
+        if (this.checkCollision(player)) {
+            // Check if player is coming from above (defeat from above)
+            if (player.velocityY > 0 && player.y + player.height - player.velocityY <= this.y + 10) {
+                return 'defeat'; // Player defeats enemy from above
+            } else {
+                return 'damage'; // Player takes damage from sides/below
+            }
+        }
+        
+        return null;
+    }
+    
+    defeat() {
+        this.alive = false;
+    }
+}
+
+// Projectile - Plasma projectile fired by PlasmaShooter
+class Projectile {
+    constructor(x, y, velocityX, velocityY) {
+        this.x = x;
+        this.y = y;
+        this.width = 10;
+        this.height = 10;
+        this.velocityX = velocityX;
+        this.velocityY = velocityY;
+        this.active = true;
+    }
+    
+    update() {
+        if (!this.active) return;
+        
+        // Move in straight line
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+        
+        // Check if off-screen (with some margin)
+        const margin = 100;
+        if (this.x < -margin || this.x > 3000 + margin || 
+            this.y < -margin || this.y > 700 + margin) {
+            this.active = false;
+        }
+    }
+    
+    render(ctx, camera) {
+        if (!this.active) return;
+        
+        // Draw glowing projectile
+        ctx.save();
+        
+        // Outer glow
+        ctx.fillStyle = 'rgba(255, 100, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(this.x - camera.x, this.y, this.width, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Inner core
+        ctx.fillStyle = '#FF6600';
+        ctx.beginPath();
+        ctx.arc(this.x - camera.x, this.y, this.width / 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+    }
+    
+    checkCollision(rect) {
+        if (!this.active) return false;
+        
+        return this.x < rect.x + rect.width &&
+               this.x + this.width > rect.x &&
+               this.y < rect.y + rect.height &&
+               this.y + this.height > rect.y;
+    }
+    
+    checkPlayerCollision(player) {
+        if (!this.active) return false;
+        
+        return this.checkCollision(player);
+    }
+    
+    deactivate() {
+        this.active = false;
+    }
+}
+
+// PlasmaShooter - Stationary enemy that fires projectiles
+class PlasmaShooter {
+    constructor(x, y, range, fireRate) {
+        this.x = x;
+        this.y = y;
+        this.width = 35;
+        this.height = 35;
+        this.range = range;
+        this.fireRate = fireRate;
+        this.fireTimer = 0;
+        this.alive = true;
+        this.type = 'plasma';
+    }
+    
+    update(player, projectiles) {
+        if (!this.alive) return;
+        
+        // Check if player is in range
+        const distanceToPlayer = Math.abs(player.x - this.x);
+        
+        if (distanceToPlayer <= this.range) {
+            // Update fire timer
+            this.fireTimer++;
+            
+            // Fire projectile when timer expires
+            if (this.fireTimer >= this.fireRate) {
+                const projectile = this.fireProjectile(player.x + player.width / 2, player.y + player.height / 2);
+                projectiles.push(projectile);
+                this.fireTimer = 0;
+            }
+        }
+    }
+    
+    fireProjectile(targetX, targetY) {
+        // Calculate direction to target
+        const dx = targetX - this.x;
+        const dy = targetY - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Normalize and set speed
+        const speed = 3;
+        const velocityX = (dx / distance) * speed;
+        const velocityY = (dy / distance) * speed;
+        
+        return new Projectile(this.x, this.y, velocityX, velocityY);
+    }
+    
+    render(ctx, camera) {
+        if (!this.alive) return;
+        
+        // Draw enemy body (purple/pink rectangle)
+        ctx.fillStyle = '#9B59B6';
+        ctx.fillRect(this.x - camera.x, this.y, this.width, this.height);
+        
+        // Draw cannon/turret indicator
+        ctx.fillStyle = '#E74C3C';
+        ctx.fillRect(this.x - camera.x + 10, this.y + 10, 15, 15);
+        
+        // Draw eyes
+        ctx.fillStyle = '#FFF';
+        ctx.fillRect(this.x - camera.x + 5, this.y + 5, 6, 6);
+        ctx.fillRect(this.x - camera.x + 24, this.y + 5, 6, 6);
+    }
+    
+    checkCollision(rect) {
+        return this.x < rect.x + rect.width &&
+               this.x + this.width > rect.x &&
+               this.y < rect.y + rect.height &&
+               this.y + this.height > rect.y;
+    }
+    
+    defeat() {
+        this.alive = false;
+    }
+}
+
+// JumpingEnemy - Jumps randomly with unpredictable movement
+class JumpingEnemy {
+    constructor(x, y, jumpInterval) {
+        this.x = x;
+        this.y = y;
+        this.width = 28;
+        this.height = 28;
+        this.jumpInterval = jumpInterval; // [min, max] frames
+        this.jumpTimer = this.getRandomJumpTime();
+        this.velocityX = 0;
+        this.velocityY = 0;
+        this.gravity = 0.5;
+        this.onGround = false;
+        this.alive = true;
+        this.type = 'jumping';
+    }
+    
+    update(platforms) {
+        if (!this.alive) return;
+        
+        // Update jump timer
+        this.jumpTimer--;
+        
+        // Jump when timer expires and on ground
+        if (this.jumpTimer <= 0 && this.onGround) {
+            this.jump();
+            this.jumpTimer = this.getRandomJumpTime();
+        }
+        
+        // Apply gravity
+        this.velocityY += this.gravity;
+        
+        // Update position
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+        
+        // Apply friction to horizontal velocity
+        this.velocityX *= 0.95;
+        
+        // Reset ground state
+        this.onGround = false;
+        
+        // Check platform collisions
+        platforms.forEach(platform => {
+            if (this.checkCollision(platform)) {
+                // Landing on top
+                if (this.velocityY > 0 && this.y + this.height - this.velocityY <= platform.y) {
+                    this.y = platform.y - this.height;
+                    this.velocityY = 0;
+                    this.onGround = true;
+                }
+            }
+        });
+    }
+    
+    jump() {
+        // Apply random horizontal velocity (-3 to 3)
+        this.velocityX = (Math.random() - 0.5) * 6;
+        
+        // Apply upward velocity
+        this.velocityY = -10;
+        
+        this.onGround = false;
+    }
+    
+    getRandomJumpTime() {
+        // Return random value in jumpInterval range
+        const min = this.jumpInterval[0];
+        const max = this.jumpInterval[1];
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+    
+    render(ctx, camera) {
+        if (!this.alive) return;
+        
+        // Draw enemy body (green rectangle)
+        ctx.fillStyle = '#00FF00';
+        ctx.fillRect(this.x - camera.x, this.y, this.width, this.height);
+        
+        // Draw eyes
+        ctx.fillStyle = '#000';
+        ctx.fillRect(this.x - camera.x + 5, this.y + 5, 6, 6);
+        ctx.fillRect(this.x - camera.x + 17, this.y + 5, 6, 6);
+        
+        // Draw mouth (jumping indicator)
+        ctx.fillStyle = '#000';
+        ctx.fillRect(this.x - camera.x + 8, this.y + 18, 12, 3);
+    }
+    
+    checkCollision(rect) {
+        return this.x < rect.x + rect.width &&
+               this.x + this.width > rect.x &&
+               this.y < rect.y + rect.height &&
+               this.y + this.height > rect.y;
+    }
+    
+    checkPlayerCollision(player) {
+        if (!this.alive) return null;
+        
+        if (this.checkCollision(player)) {
+            // Check if player is coming from above (defeat from above)
+            if (player.velocityY > 0 && player.y + player.height - player.velocityY <= this.y + 10) {
+                return 'defeat'; // Player defeats enemy from above
+            } else {
+                return 'damage'; // Player takes damage from sides/below
+            }
+        }
+        
+        return null;
+    }
+    
+    defeat() {
+        this.alive = false;
+    }
+}
+
 // LeaderboardAPI - Handles communication with backend API
 const LeaderboardAPI = {
     BASE_URL: '/api/leaderboard',
